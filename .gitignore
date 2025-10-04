@@ -26,3 +26,15 @@ models/
 
 # Logs
 *.log
+
+# Backup files
+*.backup.*
+README.backup.md
+
+# Data files
+media/documents/
+media/images/
+
+# Temporary files
+tmp_*/
+temp_*/
