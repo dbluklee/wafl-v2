@@ -1,0 +1,333 @@
+{% extends "base.html" %}
+
+{% block title %}리뷰 분석 요약 - {{ store_name }}{% endblock %}
+
+{% block content %}
+<div class="summary-container">
+    <!-- 헤더 -->
+    <div class="summary-header">
+        <a href="/dashboard" class="back-link">← 대시보드로 돌아가기</a>
+        <h1>🍽️ 리뷰 분석 보고서</h1>
+        <div class="store-info">
+            <h2>{{ store_name }}</h2>
+            <p class="store-address">{{ store_address }}</p>
+        </div>
+    </div>
+
+    <!-- 요약 로딩 상태 -->
+    <div id="loading" class="loading-container">
+        <div class="spinner"></div>
+        <p>AI가 리뷰를 분석하고 있습니다...</p>
+    </div>
+
+    <!-- 에러 메시지 -->
+    <div id="error" class="error-container" style="display: none;">
+        <div class="error-icon">⚠️</div>
+        <h3>요약을 불러오는데 실패했습니다</h3>
+        <p id="error-message"></p>
+        <button onclick="location.reload()" class="btn-retry">다시 시도</button>
+    </div>
+
+    <!-- 요약 내용 -->
+    <div id="summary-content" class="summary-content" style="display: none;">
+        <!-- 재생성 버튼 -->
+        <div class="action-buttons">
+            <button onclick="regenerateSummary()" class="btn-regenerate" id="regenerate-btn">
+                🔄 요약 재생성
+            </button>
+            <span class="last-updated">마지막 업데이트: <span id="updated-time"></span></span>
+        </div>
+
+        <!-- 마크다운 렌더링 영역 -->
+        <div id="markdown-content" class="markdown-body"></div>
+    </div>
+</div>
+
+<style>
+.summary-container {
+    max-width: 1000px;
+    margin: 0 auto;
+    padding: 20px;
+}
+
+.summary-header {
+    margin-bottom: 30px;
+}
+
+.back-link {
+    display: inline-block;
+    color: #0066cc;
+    text-decoration: none;
+    margin-bottom: 20px;
+    font-weight: 500;
+}
+
+.back-link:hover {
+    text-decoration: underline;
+}
+
+.summary-header h1 {
+    font-size: 32px;
+    color: #1a1a1a;
+    margin-bottom: 10px;
+}
+
+.store-info h2 {
+    font-size: 24px;
+    color: #333;
+    margin-bottom: 5px;
+}
+
+.store-address {
+    color: #666;
+    font-size: 14px;
+}
+
+.loading-container {
+    text-align: center;
+    padding: 80px 20px;
+}
+
+.spinner {
+    border: 4px solid #f3f3f3;
+    border-top: 4px solid #0066cc;
+    border-radius: 50%;
+    width: 50px;
+    height: 50px;
+    animation: spin 1s linear infinite;
+    margin: 0 auto 20px;
+}
+
+@keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+}
+
+.error-container {
+    text-align: center;
+    padding: 60px 20px;
+    background: #fff3cd;
+    border: 1px solid #ffeaa7;
+    border-radius: 8px;
+}
+
+.error-icon {
+    font-size: 48px;
+    margin-bottom: 20px;
+}
+
+.error-container h3 {
+    color: #856404;
+    margin-bottom: 10px;
+}
+
+.error-container p {
+    color: #856404;
+    margin-bottom: 20px;
+}
+
+.btn-retry {
+    background: #0066cc;
+    color: white;
+    border: none;
+    padding: 10px 24px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 16px;
+}
+
+.btn-retry:hover {
+    background: #0052a3;
+}
+
+.action-buttons {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 30px;
+    padding: 15px;
+    background: #f8f9fa;
+    border-radius: 8px;
+}
+
+.btn-regenerate {
+    background: #28a745;
+    color: white;
+    border: none;
+    padding: 10px 20px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 14px;
+    font-weight: 500;
+}
+
+.btn-regenerate:hover {
+    background: #218838;
+}
+
+.btn-regenerate:disabled {
+    background: #6c757d;
+    cursor: not-allowed;
+}
+
+.last-updated {
+    color: #666;
+    font-size: 14px;
+}
+
+.summary-content {
+    background: white;
+    padding: 30px;
+    border-radius: 8px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+}
+
+/* 마크다운 스타일링 */
+.markdown-body {
+    line-height: 1.8;
+    color: #333;
+}
+
+.markdown-body h1 {
+    font-size: 28px;
+    color: #1a1a1a;
+    margin-top: 30px;
+    margin-bottom: 20px;
+    padding-bottom: 10px;
+    border-bottom: 2px solid #e1e4e8;
+}
+
+.markdown-body h2 {
+    font-size: 22px;
+    color: #24292e;
+    margin-top: 30px;
+    margin-bottom: 15px;
+}
+
+.markdown-body h3 {
+    font-size: 18px;
+    color: #24292e;
+    margin-top: 20px;
+    margin-bottom: 10px;
+}
+
+.markdown-body p {
+    margin-bottom: 15px;
+}
+
+.markdown-body ul, .markdown-body ol {
+    margin-bottom: 15px;
+    padding-left: 30px;
+}
+
+.markdown-body li {
+    margin-bottom: 8px;
+}
+
+.markdown-body strong {
+    font-weight: 600;
+    color: #1a1a1a;
+}
+
+.markdown-body code {
+    background: #f6f8fa;
+    padding: 2px 6px;
+    border-radius: 3px;
+    font-family: 'Courier New', monospace;
+    font-size: 14px;
+}
+
+.markdown-body blockquote {
+    border-left: 4px solid #dfe2e5;
+    padding-left: 16px;
+    color: #6a737d;
+    margin: 15px 0;
+}
+
+.markdown-body hr {
+    border: none;
+    border-top: 1px solid #e1e4e8;
+    margin: 30px 0;
+}
+
+/* 이모지 강조 */
+.markdown-body h2::before {
+    margin-right: 8px;
+}
+</style>
+
+<script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+<script>
+const storeId = {{ store_id }};
+
+// 페이지 로드 시 요약 불러오기
+document.addEventListener('DOMContentLoaded', function() {
+    loadSummary();
+});
+
+async function loadSummary() {
+    try {
+        const response = await fetch(`/api/scraping/store/${storeId}/summary`);
+        const data = await response.json();
+
+        document.getElementById('loading').style.display = 'none';
+
+        if (data.status === 'completed' && data.summary) {
+            displaySummary(data.summary, data.created_at);
+        } else if (data.status === 'pending' || data.status === 'no_reviews') {
+            showError(data.summary || '리뷰 요약이 아직 생성되지 않았습니다.');
+        } else {
+            showError('요약을 불러올 수 없습니다.');
+        }
+    } catch (error) {
+        console.error('Error:', error);
+        document.getElementById('loading').style.display = 'none';
+        showError('서버와의 통신에 실패했습니다: ' + error.message);
+    }
+}
+
+function displaySummary(markdown, createdAt) {
+    // 마크다운을 HTML로 변환
+    const html = marked.parse(markdown);
+    document.getElementById('markdown-content').innerHTML = html;
+
+    // 시간 표시
+    const date = new Date(createdAt);
+    document.getElementById('updated-time').textContent = date.toLocaleString('ko-KR');
+
+    // 요약 내용 표시
+    document.getElementById('summary-content').style.display = 'block';
+}
+
+function showError(message) {
+    document.getElementById('error-message').textContent = message;
+    document.getElementById('error').style.display = 'block';
+}
+
+async function regenerateSummary() {
+    const btn = document.getElementById('regenerate-btn');
+    btn.disabled = true;
+    btn.textContent = '🔄 생성 중...';
+
+    try {
+        const response = await fetch(`/api/scraping/store/${storeId}/summary/regenerate`, {
+            method: 'POST'
+        });
+        const data = await response.json();
+
+        if (response.ok) {
+            alert('요약 재생성이 시작되었습니다. 잠시 후 페이지가 새로고침됩니다.');
+            setTimeout(() => location.reload(), 3000);
+        } else {
+            alert('요약 재생성 실패: ' + (data.detail || '알 수 없는 오류'));
+            btn.disabled = false;
+            btn.textContent = '🔄 요약 재생성';
+        }
+    } catch (error) {
+        alert('요약 재생성 중 오류가 발생했습니다: ' + error.message);
+        btn.disabled = false;
+        btn.textContent = '🔄 요약 재생성';
+    }
+}
+</script>
+{% endblock %}

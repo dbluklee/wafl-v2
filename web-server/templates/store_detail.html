@@ -1,0 +1,619 @@
+{% extends "base.html" %}
+
+{% block title %}매장 상세보기 - {{ store_id }}{% endblock %}
+
+{% block content %}
+<div class="store-detail-container">
+    <!-- 로딩 상태 -->
+    <div id="loading" class="loading-container">
+        <div class="spinner"></div>
+        <p>매장 정보를 불러오는 중...</p>
+    </div>
+
+    <!-- 에러 메시지 -->
+    <div id="error" class="error-container" style="display: none;">
+        <div class="error-icon">⚠️</div>
+        <h3>정보를 불러오는데 실패했습니다</h3>
+        <p id="error-message"></p>
+        <button onclick="location.href='/dashboard'" class="btn-back">대시보드로 돌아가기</button>
+    </div>
+
+    <!-- 메인 콘텐츠 -->
+    <div id="main-content" style="display: none;">
+        <!-- 헤더 -->
+        <div class="detail-header">
+            <a href="/dashboard" class="back-link">← 대시보드로 돌아가기</a>
+            <h1 id="store-name">매장 상세보기</h1>
+            <p id="store-address" class="store-address"></p>
+        </div>
+
+        <!-- 탭 네비게이션 -->
+        <div class="tabs">
+            <button class="tab-button active" onclick="showTab('info')">매장 정보</button>
+            <button class="tab-button" onclick="showTab('menus')">메뉴</button>
+            <button class="tab-button" onclick="showTab('reviews')">리뷰</button>
+            <button class="tab-button" onclick="showTab('summary')">요약</button>
+        </div>
+
+        <!-- 매장 정보 탭 -->
+        <div id="tab-info" class="tab-content active">
+            <div class="info-grid">
+                <div class="info-card">
+                    <h3>기본 정보</h3>
+                    <div class="info-row">
+                        <span class="info-label">매장명:</span>
+                        <span id="info-store-name"></span>
+                    </div>
+                    <div class="info-row">
+                        <span class="info-label">주소:</span>
+                        <span id="info-address"></span>
+                    </div>
+                    <div class="info-row">
+                        <span class="info-label">전화번호:</span>
+                        <span id="info-phone"></span>
+                    </div>
+                    <div class="info-row">
+                        <span class="info-label">카테고리:</span>
+                        <span id="info-category"></span>
+                    </div>
+                </div>
+
+                <div class="info-card">
+                    <h3>등록 정보</h3>
+                    <div class="info-row">
+                        <span class="info-label">사업자등록번호:</span>
+                        <span id="info-business-number"></span>
+                    </div>
+                    <div class="info-row">
+                        <span class="info-label">대표자명:</span>
+                        <span id="info-owner-name"></span>
+                    </div>
+                    <div class="info-row">
+                        <span class="info-label">대표자 연락처:</span>
+                        <span id="info-owner-phone"></span>
+                    </div>
+                    <div class="info-row">
+                        <span class="info-label">스크래핑 상태:</span>
+                        <span id="info-status"></span>
+                    </div>
+                </div>
+
+                <div class="info-card full-width" id="intro-card" style="display: none;">
+                    <h3>매장 소개</h3>
+                    <p id="info-intro"></p>
+                </div>
+
+                <div class="info-card full-width" id="description-card" style="display: none;">
+                    <h3>상세 설명</h3>
+                    <p id="info-description"></p>
+                </div>
+
+                <div class="info-card full-width" id="services-card" style="display: none;">
+                    <h3>제공 서비스</h3>
+                    <p id="info-services"></p>
+                </div>
+            </div>
+        </div>
+
+        <!-- 메뉴 탭 -->
+        <div id="tab-menus" class="tab-content">
+            <div class="section-header">
+                <h2>메뉴 목록</h2>
+                <span id="menu-count" class="count-badge"></span>
+            </div>
+            <div id="menus-grid" class="menus-grid"></div>
+            <div id="no-menus" class="empty-state" style="display: none;">
+                <p>등록된 메뉴가 없습니다.</p>
+            </div>
+        </div>
+
+        <!-- 리뷰 탭 -->
+        <div id="tab-reviews" class="tab-content">
+            <div class="section-header">
+                <h2>고객 리뷰</h2>
+                <span id="review-count" class="count-badge"></span>
+            </div>
+            <div id="reviews-list" class="reviews-list"></div>
+            <div id="no-reviews" class="empty-state" style="display: none;">
+                <p>등록된 리뷰가 없습니다.</p>
+            </div>
+        </div>
+
+        <!-- 요약 탭 -->
+        <div id="tab-summary" class="tab-content">
+            <div class="section-header">
+                <h2>AI 리뷰 분석 요약</h2>
+                <button onclick="window.location.href='/store/'+storeId+'/summary'" class="btn-full-summary">
+                    전체 요약 페이지 보기
+                </button>
+            </div>
+            <div id="summary-content" class="summary-preview"></div>
+            <div id="no-summary" class="empty-state" style="display: none;">
+                <p>요약이 아직 생성되지 않았습니다.</p>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+.store-detail-container {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 20px;
+}
+
+.loading-container {
+    text-align: center;
+    padding: 80px 20px;
+}
+
+.spinner {
+    border: 4px solid #f3f3f3;
+    border-top: 4px solid #0066cc;
+    border-radius: 50%;
+    width: 50px;
+    height: 50px;
+    animation: spin 1s linear infinite;
+    margin: 0 auto 20px;
+}
+
+@keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+}
+
+.error-container {
+    text-align: center;
+    padding: 60px 20px;
+    background: #fff3cd;
+    border: 1px solid #ffeaa7;
+    border-radius: 8px;
+}
+
+.error-icon {
+    font-size: 48px;
+    margin-bottom: 20px;
+}
+
+.btn-back {
+    background: #0066cc;
+    color: white;
+    border: none;
+    padding: 10px 24px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 16px;
+    margin-top: 20px;
+}
+
+.detail-header {
+    margin-bottom: 30px;
+}
+
+.back-link {
+    display: inline-block;
+    color: #0066cc;
+    text-decoration: none;
+    margin-bottom: 20px;
+    font-weight: 500;
+}
+
+.back-link:hover {
+    text-decoration: underline;
+}
+
+.detail-header h1 {
+    font-size: 32px;
+    color: #1a1a1a;
+    margin-bottom: 10px;
+}
+
+.store-address {
+    color: #666;
+    font-size: 16px;
+}
+
+.tabs {
+    display: flex;
+    gap: 10px;
+    border-bottom: 2px solid #e1e4e8;
+    margin-bottom: 30px;
+}
+
+.tab-button {
+    background: none;
+    border: none;
+    padding: 12px 24px;
+    font-size: 16px;
+    font-weight: 500;
+    color: #666;
+    cursor: pointer;
+    border-bottom: 3px solid transparent;
+    transition: all 0.2s;
+}
+
+.tab-button:hover {
+    color: #0066cc;
+}
+
+.tab-button.active {
+    color: #0066cc;
+    border-bottom-color: #0066cc;
+}
+
+.tab-content {
+    display: none;
+}
+
+.tab-content.active {
+    display: block;
+}
+
+.info-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
+    gap: 20px;
+}
+
+.info-card {
+    background: white;
+    padding: 24px;
+    border-radius: 8px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+}
+
+.info-card.full-width {
+    grid-column: 1 / -1;
+}
+
+.info-card h3 {
+    font-size: 18px;
+    color: #1a1a1a;
+    margin-bottom: 16px;
+    padding-bottom: 12px;
+    border-bottom: 2px solid #e1e4e8;
+}
+
+.info-row {
+    display: flex;
+    margin-bottom: 12px;
+}
+
+.info-label {
+    font-weight: 600;
+    color: #555;
+    min-width: 140px;
+}
+
+.section-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 20px;
+}
+
+.section-header h2 {
+    font-size: 24px;
+    color: #1a1a1a;
+}
+
+.count-badge {
+    background: #0066cc;
+    color: white;
+    padding: 4px 12px;
+    border-radius: 12px;
+    font-size: 14px;
+    font-weight: 600;
+}
+
+.btn-full-summary {
+    background: #28a745;
+    color: white;
+    border: none;
+    padding: 8px 16px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 14px;
+}
+
+.btn-full-summary:hover {
+    background: #218838;
+}
+
+.menus-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+    gap: 20px;
+}
+
+.menu-card {
+    background: white;
+    border-radius: 8px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+    overflow: hidden;
+    transition: transform 0.2s;
+}
+
+.menu-card:hover {
+    transform: translateY(-4px);
+}
+
+.menu-image {
+    width: 100%;
+    height: 200px;
+    object-fit: cover;
+    background: #f0f0f0;
+}
+
+.menu-info {
+    padding: 16px;
+}
+
+.menu-name {
+    font-size: 16px;
+    font-weight: 600;
+    color: #1a1a1a;
+    margin-bottom: 8px;
+}
+
+.menu-price {
+    font-size: 18px;
+    color: #0066cc;
+    font-weight: 700;
+}
+
+.menu-description {
+    font-size: 14px;
+    color: #666;
+    margin-top: 8px;
+    line-height: 1.4;
+}
+
+.reviews-list {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+}
+
+.review-card {
+    background: white;
+    padding: 20px;
+    border-radius: 8px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+}
+
+.review-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 12px;
+}
+
+.review-author {
+    font-weight: 600;
+    color: #1a1a1a;
+}
+
+.review-date {
+    font-size: 14px;
+    color: #666;
+}
+
+.review-rating {
+    color: #ffa500;
+    margin-bottom: 8px;
+}
+
+.review-text {
+    color: #333;
+    line-height: 1.6;
+}
+
+.review-menu {
+    margin-top: 8px;
+    padding-top: 8px;
+    border-top: 1px solid #e1e4e8;
+    font-size: 14px;
+    color: #0066cc;
+}
+
+.summary-preview {
+    background: white;
+    padding: 30px;
+    border-radius: 8px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+    max-height: 600px;
+    overflow-y: auto;
+}
+
+.empty-state {
+    text-align: center;
+    padding: 60px 20px;
+    color: #666;
+    background: #f8f9fa;
+    border-radius: 8px;
+}
+
+@media (max-width: 768px) {
+    .info-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .menus-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .tabs {
+        overflow-x: auto;
+    }
+}
+</style>
+
+<script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+<script>
+const storeId = {{ store_id }};
+let storeData = null;
+
+document.addEventListener('DOMContentLoaded', function() {
+    loadStoreDetail();
+});
+
+async function loadStoreDetail() {
+    try {
+        const response = await fetch(`/api/stores/${storeId}/detail`);
+
+        if (!response.ok) {
+            throw new Error('매장 정보를 불러올 수 없습니다.');
+        }
+
+        storeData = await response.json();
+
+        document.getElementById('loading').style.display = 'none';
+        document.getElementById('main-content').style.display = 'block';
+
+        displayStoreInfo(storeData.store_info);
+        displayMenus(storeData.menus);
+        displayReviews(storeData.reviews);
+        displaySummary(storeData.summary, storeData.summary_status);
+
+    } catch (error) {
+        console.error('Error:', error);
+        document.getElementById('loading').style.display = 'none';
+        document.getElementById('error-message').textContent = error.message;
+        document.getElementById('error').style.display = 'block';
+    }
+}
+
+function displayStoreInfo(info) {
+    // 헤더
+    document.getElementById('store-name').textContent = info.scraped_store_name || info.store_name;
+    document.getElementById('store-address').textContent = info.scraped_store_address || info.store_address;
+
+    // 기본 정보
+    document.getElementById('info-store-name').textContent = info.scraped_store_name || info.store_name;
+    document.getElementById('info-address').textContent = info.scraped_store_address || info.store_address;
+    document.getElementById('info-phone').textContent = info.scraped_phone || '-';
+    document.getElementById('info-category').textContent = info.scraped_category || '-';
+
+    // 등록 정보
+    document.getElementById('info-business-number').textContent = info.business_number;
+    document.getElementById('info-owner-name').textContent = info.owner_name;
+    document.getElementById('info-owner-phone').textContent = info.owner_phone;
+    document.getElementById('info-status').innerHTML = getStatusBadge(info.scraping_status);
+
+    // 선택적 정보
+    if (info.scraped_intro) {
+        document.getElementById('intro-card').style.display = 'block';
+        document.getElementById('info-intro').textContent = info.scraped_intro;
+    }
+
+    if (info.scraped_description) {
+        document.getElementById('description-card').style.display = 'block';
+        document.getElementById('info-description').textContent = info.scraped_description;
+    }
+
+    if (info.scraped_services) {
+        document.getElementById('services-card').style.display = 'block';
+        document.getElementById('info-services').textContent = info.scraped_services;
+    }
+}
+
+function displayMenus(menus) {
+    const menusGrid = document.getElementById('menus-grid');
+    const noMenus = document.getElementById('no-menus');
+    const menuCount = document.getElementById('menu-count');
+
+    menuCount.textContent = `${menus.length}개`;
+
+    if (menus.length === 0) {
+        menusGrid.style.display = 'none';
+        noMenus.style.display = 'block';
+        return;
+    }
+
+    menusGrid.innerHTML = menus.map(menu => `
+        <div class="menu-card">
+            ${menu.image_url ? `<img src="${menu.image_url}" alt="${menu.menu_name}" class="menu-image" onerror="this.style.display='none'">` : '<div class="menu-image"></div>'}
+            <div class="menu-info">
+                <div class="menu-name">${menu.menu_name}</div>
+                <div class="menu-price">${formatPrice(menu.price)}</div>
+                ${menu.description ? `<div class="menu-description">${menu.description}</div>` : ''}
+            </div>
+        </div>
+    `).join('');
+}
+
+function displayReviews(reviews) {
+    const reviewsList = document.getElementById('reviews-list');
+    const noReviews = document.getElementById('no-reviews');
+    const reviewCount = document.getElementById('review-count');
+
+    reviewCount.textContent = `${reviews.length}개`;
+
+    if (reviews.length === 0) {
+        reviewsList.style.display = 'none';
+        noReviews.style.display = 'block';
+        return;
+    }
+
+    reviewsList.innerHTML = reviews.slice(0, 50).map(review => `
+        <div class="review-card">
+            <div class="review-header">
+                <div class="review-author">${review.author || '익명'}</div>
+                <div class="review-date">${review.visit_date || '-'}</div>
+            </div>
+            ${review.rating ? `<div class="review-rating">${'★'.repeat(review.rating)}${'☆'.repeat(5-review.rating)}</div>` : ''}
+            <div class="review-text">${review.content}</div>
+            ${review.menu ? `<div class="review-menu">주문 메뉴: ${review.menu}</div>` : ''}
+        </div>
+    `).join('');
+
+    if (reviews.length > 50) {
+        reviewsList.innerHTML += `<div class="empty-state">처음 50개의 리뷰만 표시됩니다. (전체 ${reviews.length}개)</div>`;
+    }
+}
+
+function displaySummary(summary, status) {
+    const summaryContent = document.getElementById('summary-content');
+    const noSummary = document.getElementById('no-summary');
+
+    if (status === 'completed' && summary) {
+        summaryContent.innerHTML = marked.parse(summary);
+        summaryContent.style.display = 'block';
+        noSummary.style.display = 'none';
+    } else {
+        summaryContent.style.display = 'none';
+        noSummary.style.display = 'block';
+    }
+}
+
+function showTab(tabName) {
+    // 모든 탭 버튼과 콘텐츠 비활성화
+    document.querySelectorAll('.tab-button').forEach(btn => btn.classList.remove('active'));
+    document.querySelectorAll('.tab-content').forEach(content => content.classList.remove('active'));
+
+    // 선택된 탭 활성화
+    event.target.classList.add('active');
+    document.getElementById(`tab-${tabName}`).classList.add('active');
+}
+
+function getStatusBadge(status) {
+    const badges = {
+        'pending': '<span style="background: #fef3c7; color: #92400e; padding: 4px 12px; border-radius: 12px; font-size: 14px;">대기중</span>',
+        'in_progress': '<span style="background: #dbeafe; color: #1e40af; padding: 4px 12px; border-radius: 12px; font-size: 14px;">진행중</span>',
+        'completed': '<span style="background: #d1fae5; color: #065f46; padding: 4px 12px; border-radius: 12px; font-size: 14px;">완료</span>',
+        'mismatch': '<span style="background: #fed7aa; color: #9a3412; padding: 4px 12px; border-radius: 12px; font-size: 14px;">정보불일치</span>',
+        'error': '<span style="background: #fee2e2; color: #991b1b; padding: 4px 12px; border-radius: 12px; font-size: 14px;">오류</span>'
+    };
+    return badges[status] || badges['pending'];
+}
+
+function formatPrice(price) {
+    if (!price) return '-';
+    if (typeof price === 'string') {
+        return price;
+    }
+    return price.toLocaleString('ko-KR') + '원';
+}
+</script>
+{% endblock %}

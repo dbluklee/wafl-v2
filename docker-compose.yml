@@ -1,0 +1,125 @@
+version: '3.8'
+
+services:
+  # API Gateway (Nginx)
+  wafl-api-gateway:
+    image: nginx:alpine
+    container_name: wafl-api-gateway
+    ports:
+      - "50080:80"  # 외부: 50080, 내부: 80
+    volumes:
+      - ./api-gateway/nginx.conf:/etc/nginx/nginx.conf
+      - ./media:/app/media  # 이미지 서빙을 위한 볼륨
+    depends_on:
+      - wafl-web-server
+      - wafl-scraping-server
+    networks:
+      - wafl-network
+    restart: unless-stopped
+
+  # 공통 인프라 서비스
+  wafl-postgresql:
+    image: postgres:15-alpine
+    container_name: wafl-postgresql
+    environment:
+      POSTGRES_DB: wafl_db
+      POSTGRES_USER: wafl_user
+      POSTGRES_PASSWORD: wafl_password
+    ports:
+      - "55432:5432"  # 외부: 55432, 내부: 5432
+    volumes:
+      - postgresql_data:/var/lib/postgresql/data
+      - ./init.sql:/docker-entrypoint-initdb.d/init.sql
+    networks:
+      - wafl-network
+    restart: unless-stopped
+
+  wafl-redis:
+    image: redis:7-alpine
+    container_name: wafl-redis
+    ports:
+      - "56379:6379"  # 외부: 56379, 내부: 6379
+    volumes:
+      - redis_data:/data
+    networks:
+      - wafl-network
+    restart: unless-stopped
+
+  # 마이크로서비스들
+  wafl-web-server:
+    build:
+      context: ./web-server
+      dockerfile: Dockerfile
+    container_name: wafl-web-server
+    ports:
+      - "58000:8000"  # 임시로 외부 접근 허용
+    volumes:
+      - ./media:/app/media
+      - ./web-server:/app
+    environment:
+      - DATABASE_URL=postgresql://wafl_user:wafl_password@wafl-postgresql:5432/wafl_db
+      - REDIS_URL=redis://wafl-redis:6379/0
+      - SERVICE_NAME=web-server
+      - SERVICE_PORT=8000
+      - JUSO_API_KEY=${JUSO_API_KEY}
+    depends_on:
+      - wafl-postgresql
+      - wafl-redis
+    networks:
+      - wafl-network
+    restart: unless-stopped
+
+  # Celery Worker (스크래핑 작업 수행)
+  wafl-scraping-worker:
+    build:
+      context: ./scraping-server
+      dockerfile: Dockerfile
+    container_name: wafl-scraping-worker
+    volumes:
+      - ./media:/app/media
+      - ./scraping-server:/app
+    environment:
+      - DATABASE_URL=postgresql://wafl_user:wafl_password@wafl-postgresql:5432/wafl_db
+      - REDIS_URL=redis://wafl-redis:6379/0
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+    depends_on:
+      - wafl-postgresql
+      - wafl-redis
+    networks:
+      - wafl-network
+    restart: unless-stopped
+    command: ["celery", "-A", "celery_app.celery", "worker", "--loglevel=info", "--concurrency=2", "--queues=celery,scraping,summary"]
+
+  # 스크래핑 API 서버
+  wafl-scraping-server:
+    build:
+      context: ./scraping-server
+      dockerfile: Dockerfile
+    container_name: wafl-scraping-server
+    ports:
+      - "58001:8001"  # 임시로 외부 접근 허용
+    volumes:
+      - ./media:/app/media
+      - ./scraping-server:/app
+    environment:
+      - DATABASE_URL=postgresql://wafl_user:wafl_password@wafl-postgresql:5432/wafl_db
+      - REDIS_URL=redis://wafl-redis:6379/0
+      - SERVICE_NAME=scraping-server
+      - SERVICE_PORT=8001
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+    depends_on:
+      - wafl-postgresql
+      - wafl-redis
+      - wafl-scraping-worker
+    networks:
+      - wafl-network
+    restart: unless-stopped
+    command: ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8001", "--reload"]
+
+volumes:
+  postgresql_data:
+  redis_data:
+
+networks:
+  wafl-network:
+    driver: bridge

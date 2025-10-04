@@ -1,0 +1,104 @@
+{% extends "base.html" %}
+
+{% block title %}WAFL - 네이버 스토어 스크래핑 서비스{% endblock %}
+
+{% block content %}
+<div class="px-4 py-8">
+    <!-- 히어로 섹션 -->
+    <div class="text-center mb-12">
+        <h1 class="text-4xl font-bold text-gray-900 mb-4">
+            네이버 스토어 데이터를
+            <span class="text-blue-600">스마트하게</span>
+        </h1>
+        <p class="text-xl text-gray-600 mb-8 max-w-2xl mx-auto">
+            네이버 스토어의 매장 정보, 메뉴, 리뷰를 자동으로 수집하고
+            AI가 분석한 인사이트를 제공합니다.
+        </p>
+        <div class="space-x-4">
+            <a href="/register"
+               class="inline-flex items-center px-6 py-3 border border-transparent text-base font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 transition-colors">
+                매장 등록하기
+                <svg class="ml-2 -mr-1 w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                    <path fill-rule="evenodd" d="M10.293 3.293a1 1 0 011.414 0l6 6a1 1 0 010 1.414l-6 6a1 1 0 01-1.414-1.414L14.586 11H3a1 1 0 110-2h11.586l-4.293-4.293a1 1 0 010-1.414z" clip-rule="evenodd"></path>
+                </svg>
+            </a>
+            <a href="/dashboard"
+               class="inline-flex items-center px-6 py-3 border border-gray-300 text-base font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 transition-colors">
+                대시보드 보기
+            </a>
+        </div>
+    </div>
+
+    <!-- 기능 소개 -->
+    <div class="grid md:grid-cols-3 gap-8 mb-12">
+        <div class="bg-white rounded-lg shadow-sm p-6 border">
+            <div class="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center mb-4">
+                <svg class="w-6 h-6 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
+                </svg>
+            </div>
+            <h3 class="text-lg font-semibold text-gray-900 mb-2">매장 정보 수집</h3>
+            <p class="text-gray-600">
+                네이버 스토어의 기본 정보, 운영시간, 연락처 등을
+                자동으로 수집하여 정리합니다.
+            </p>
+        </div>
+
+        <div class="bg-white rounded-lg shadow-sm p-6 border">
+            <div class="w-12 h-12 bg-green-100 rounded-lg flex items-center justify-center mb-4">
+                <svg class="w-6 h-6 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 10h16M4 14h16M4 18h16"></path>
+                </svg>
+            </div>
+            <h3 class="text-lg font-semibold text-gray-900 mb-2">메뉴 & 가격 정보</h3>
+            <p class="text-gray-600">
+                메뉴명, 가격, 설명, 이미지를 수집하고
+                체계적으로 정리하여 제공합니다.
+            </p>
+        </div>
+
+        <div class="bg-white rounded-lg shadow-sm p-6 border">
+            <div class="w-12 h-12 bg-purple-100 rounded-lg flex items-center justify-center mb-4">
+                <svg class="w-6 h-6 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"></path>
+                </svg>
+            </div>
+            <h3 class="text-lg font-semibold text-gray-900 mb-2">AI 리뷰 분석</h3>
+            <p class="text-gray-600">
+                고객 리뷰를 AI가 분석하여 핵심 인사이트와
+                개선 포인트를 제공합니다.
+            </p>
+        </div>
+    </div>
+
+    <!-- 사용 방법 -->
+    <div class="bg-white rounded-lg shadow-sm p-8 border">
+        <h2 class="text-2xl font-bold text-gray-900 mb-6 text-center">간단한 3단계로 시작하세요</h2>
+        <div class="grid md:grid-cols-3 gap-8">
+            <div class="text-center">
+                <div class="w-16 h-16 bg-blue-600 rounded-full flex items-center justify-center mx-auto mb-4">
+                    <span class="text-white font-bold text-xl">1</span>
+                </div>
+                <h3 class="text-lg font-semibold text-gray-900 mb-2">매장 정보 입력</h3>
+                <p class="text-gray-600">매장명, 주소, 사업자등록번호, 네이버 스토어 링크를 입력하세요.</p>
+            </div>
+
+            <div class="text-center">
+                <div class="w-16 h-16 bg-blue-600 rounded-full flex items-center justify-center mx-auto mb-4">
+                    <span class="text-white font-bold text-xl">2</span>
+                </div>
+                <h3 class="text-lg font-semibold text-gray-900 mb-2">스크래핑 시작</h3>
+                <p class="text-gray-600">자동으로 네이버 스토어에서 데이터를 수집합니다.</p>
+            </div>
+
+            <div class="text-center">
+                <div class="w-16 h-16 bg-blue-600 rounded-full flex items-center justify-center mx-auto mb-4">
+                    <span class="text-white font-bold text-xl">3</span>
+                </div>
+                <h3 class="text-lg font-semibold text-gray-900 mb-2">결과 확인</h3>
+                <p class="text-gray-600">수집된 데이터와 AI 분석 결과를 대시보드에서 확인하세요.</p>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

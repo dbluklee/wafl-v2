@@ -1,0 +1,287 @@
+{% extends "base.html" %}
+
+{% block title %}대시보드 - WAFL{% endblock %}
+
+{% block content %}
+<div class="px-4 py-8">
+    <div class="mb-8">
+        <h1 class="text-3xl font-bold text-gray-900 mb-2">대시보드</h1>
+        <p class="text-gray-600">등록된 매장들의 스크래핑 상태와 결과를 확인할 수 있습니다.</p>
+    </div>
+
+    <!-- 통계 카드 -->
+    <div class="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8" id="stats-cards">
+        <div class="bg-white rounded-lg shadow-sm border p-6">
+            <div class="flex items-center">
+                <div class="flex-shrink-0">
+                    <div class="w-8 h-8 bg-blue-100 rounded-md flex items-center justify-center">
+                        <svg class="w-4 h-4 text-blue-600" fill="currentColor" viewBox="0 0 20 20">
+                            <path d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                        </svg>
+                    </div>
+                </div>
+                <div class="ml-4">
+                    <p class="text-sm font-medium text-gray-500">총 매장</p>
+                    <p class="text-2xl font-semibold text-gray-900" id="total-stores">-</p>
+                </div>
+            </div>
+        </div>
+
+        <div class="bg-white rounded-lg shadow-sm border p-6">
+            <div class="flex items-center">
+                <div class="flex-shrink-0">
+                    <div class="w-8 h-8 bg-green-100 rounded-md flex items-center justify-center">
+                        <svg class="w-4 h-4 text-green-600" fill="currentColor" viewBox="0 0 20 20">
+                            <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"></path>
+                        </svg>
+                    </div>
+                </div>
+                <div class="ml-4">
+                    <p class="text-sm font-medium text-gray-500">완료</p>
+                    <p class="text-2xl font-semibold text-gray-900" id="completed-stores">-</p>
+                </div>
+            </div>
+        </div>
+
+        <div class="bg-white rounded-lg shadow-sm border p-6">
+            <div class="flex items-center">
+                <div class="flex-shrink-0">
+                    <div class="w-8 h-8 bg-yellow-100 rounded-md flex items-center justify-center">
+                        <svg class="w-4 h-4 text-yellow-600" fill="currentColor" viewBox="0 0 20 20">
+                            <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-12a1 1 0 10-2 0v4a1 1 0 00.293.707l2.828 2.829a1 1 0 101.415-1.415L11 9.586V6z" clip-rule="evenodd"></path>
+                        </svg>
+                    </div>
+                </div>
+                <div class="ml-4">
+                    <p class="text-sm font-medium text-gray-500">진행중</p>
+                    <p class="text-2xl font-semibold text-gray-900" id="pending-stores">-</p>
+                </div>
+            </div>
+        </div>
+
+        <div class="bg-white rounded-lg shadow-sm border p-6">
+            <div class="flex items-center">
+                <div class="flex-shrink-0">
+                    <div class="w-8 h-8 bg-red-100 rounded-md flex items-center justify-center">
+                        <svg class="w-4 h-4 text-red-600" fill="currentColor" viewBox="0 0 20 20">
+                            <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clip-rule="evenodd"></path>
+                        </svg>
+                    </div>
+                </div>
+                <div class="ml-4">
+                    <p class="text-sm font-medium text-gray-500">오류</p>
+                    <p class="text-2xl font-semibold text-gray-900" id="error-stores">-</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 매장 목록 -->
+    <div class="bg-white rounded-lg shadow-sm border">
+        <div class="px-6 py-4 border-b border-gray-200">
+            <div class="flex justify-between items-center">
+                <h2 class="text-lg font-semibold text-gray-900">등록된 매장</h2>
+                <a href="/register"
+                   class="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700">
+                    새 매장 등록
+                </a>
+            </div>
+        </div>
+
+        <div class="overflow-x-auto">
+            <table class="min-w-full divide-y divide-gray-200">
+                <thead class="bg-gray-50">
+                    <tr>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">매장명</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">주소</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">상태</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">등록일</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">액션</th>
+                    </tr>
+                </thead>
+                <tbody id="stores-table-body" class="bg-white divide-y divide-gray-200">
+                    <!-- 데이터가 로드됩니다 -->
+                </tbody>
+            </table>
+        </div>
+
+        <div id="empty-state" class="hidden text-center py-12">
+            <svg class="mx-auto h-12 w-12 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"></path>
+            </svg>
+            <h3 class="mt-2 text-sm font-medium text-gray-900">등록된 매장이 없습니다</h3>
+            <p class="mt-1 text-sm text-gray-500">첫 번째 매장을 등록해보세요.</p>
+            <div class="mt-6">
+                <a href="/register"
+                   class="inline-flex items-center px-4 py-2 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700">
+                    매장 등록하기
+                </a>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+// 페이지 로드 시 데이터 가져오기
+document.addEventListener('DOMContentLoaded', function() {
+    loadDashboardData();
+
+    // 5초마다 자동 새로고침
+    setInterval(loadDashboardData, 5000);
+});
+
+async function loadDashboardData() {
+    try {
+        const response = await fetch('/api/stores');
+        const stores = await response.json();
+
+        updateStats(stores);
+        updateStoresTable(stores);
+
+    } catch (error) {
+        console.error('데이터 로드 오류:', error);
+    }
+}
+
+function updateStats(stores) {
+    const total = stores.length;
+    const completed = stores.filter(s => s.scraping_status === 'completed').length;
+    const pending = stores.filter(s => ['pending', 'in_progress'].includes(s.scraping_status)).length;
+    const error = stores.filter(s => ['error', 'mismatch'].includes(s.scraping_status)).length;
+
+    document.getElementById('total-stores').textContent = total;
+    document.getElementById('completed-stores').textContent = completed;
+    document.getElementById('pending-stores').textContent = pending;
+    document.getElementById('error-stores').textContent = error;
+}
+
+function updateStoresTable(stores) {
+    const tbody = document.getElementById('stores-table-body');
+    const emptyState = document.getElementById('empty-state');
+
+    if (stores.length === 0) {
+        tbody.innerHTML = '';
+        emptyState.classList.remove('hidden');
+        return;
+    }
+
+    emptyState.classList.add('hidden');
+
+    tbody.innerHTML = stores.map(store => `
+        <tr>
+            <td class="px-6 py-4 whitespace-nowrap">
+                <div class="text-sm font-medium text-gray-900">${store.store_name}</div>
+            </td>
+            <td class="px-6 py-4 whitespace-nowrap">
+                <div class="text-sm text-gray-500">${store.store_address}</div>
+            </td>
+            <td class="px-6 py-4 whitespace-nowrap">
+                ${getStatusBadge(store.scraping_status)}
+            </td>
+            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                ${formatDate(store.created_at)}
+            </td>
+            <td class="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                <button onclick="startScraping(${store.id})"
+                        class="text-blue-600 hover:text-blue-900 mr-3"
+                        ${store.scraping_status === 'in_progress' ? 'disabled' : ''}>
+                    ${store.scraping_status === 'pending' ? '스크래핑 시작' : '재시작'}
+                </button>
+                <button onclick="viewDetails(${store.id})"
+                        class="text-green-600 hover:text-green-900 mr-3">
+                    상세보기
+                </button>
+                <button onclick="deleteStore(${store.id}, '${store.store_name.replace(/'/g, "\\'")}')"
+                        class="text-red-600 hover:text-red-900">
+                    삭제
+                </button>
+            </td>
+        </tr>
+    `).join('');
+}
+
+function getStatusBadge(status) {
+    const badges = {
+        'pending': '<span class="inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-yellow-100 text-yellow-800">대기중</span>',
+        'in_progress': '<span class="inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-blue-100 text-blue-800">진행중</span>',
+        'completed': '<span class="inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-green-100 text-green-800">완료</span>',
+        'mismatch': '<span class="inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-orange-100 text-orange-800">정보불일치</span>',
+        'error': '<span class="inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-red-100 text-red-800">오류</span>'
+    };
+    return badges[status] || badges['pending'];
+}
+
+function formatDate(dateString) {
+    const date = new Date(dateString);
+    return date.toLocaleDateString('ko-KR') + ' ' + date.toLocaleTimeString('ko-KR', {hour: '2-digit', minute: '2-digit'});
+}
+
+async function startScraping(storeId) {
+    try {
+        const response = await fetch(`/api/scraping/start`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ store_id: storeId })
+        });
+
+        if (response.ok) {
+            const result = await response.json();
+            console.log('스크래핑 시작 성공:', result);
+            if (typeof showToast === 'function') {
+                showToast('success', '스크래핑이 시작되었습니다.');
+            } else {
+                alert('스크래핑이 시작되었습니다.');
+            }
+            loadDashboardData(); // 데이터 새로고침
+        } else {
+            const error = await response.json();
+            console.log('API 오류:', error);
+            const errorMessage = error?.detail || error?.message || '스크래핑 시작 중 오류가 발생했습니다.';
+            if (typeof showToast === 'function') {
+                showToast('error', errorMessage);
+            } else {
+                alert('오류: ' + errorMessage);
+            }
+        }
+    } catch (error) {
+        console.log('네트워크 오류:', error);
+        const errorMessage = '네트워크 오류가 발생했습니다: ' + (error?.message || error.toString());
+        if (typeof showToast === 'function') {
+            showToast('error', errorMessage);
+        } else {
+            alert('오류: ' + errorMessage);
+        }
+    }
+}
+
+function viewDetails(storeId) {
+    window.location.href = `/store/${storeId}/detail`;
+}
+
+async function deleteStore(storeId, storeName) {
+    if (!confirm(`정말로 '${storeName}' 매장을 삭제하시겠습니까?\n\n이 작업은 되돌릴 수 없으며, 매장과 관련된 모든 데이터(메뉴, 리뷰, 요약)가 함께 삭제됩니다.`)) {
+        return;
+    }
+
+    try {
+        const response = await fetch(`/api/stores/${storeId}`, {
+            method: 'DELETE'
+        });
+
+        if (response.ok) {
+            const result = await response.json();
+            alert(result.message || '매장이 성공적으로 삭제되었습니다.');
+            loadDashboardData(); // 목록 새로고침
+        } else {
+            const error = await response.json();
+            alert('삭제 실패: ' + (error.detail || '알 수 없는 오류가 발생했습니다.'));
+        }
+    } catch (error) {
+        console.error('삭제 오류:', error);
+        alert('삭제 중 오류가 발생했습니다: ' + error.message);
+    }
+}
+</script>
+{% endblock %}
