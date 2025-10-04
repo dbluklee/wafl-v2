@@ -33,6 +33,7 @@
             <button class="tab-button" onclick="showTab('menus')">메뉴</button>
             <button class="tab-button" onclick="showTab('reviews')">리뷰</button>
             <button class="tab-button" onclick="showTab('summary')">요약</button>
+            <button class="tab-button" onclick="showTab('rag-docs')">RAG 문서</button>
         </div>
 
         <!-- 매장 정보 탭 -->
@@ -130,6 +131,40 @@
             <div id="summary-content" class="summary-preview"></div>
             <div id="no-summary" class="empty-state" style="display: none;">
                 <p>요약이 아직 생성되지 않았습니다.</p>
+            </div>
+        </div>
+
+        <!-- RAG 문서 탭 -->
+        <div id="tab-rag-docs" class="tab-content">
+            <div class="section-header">
+                <h2>RAG 챗봇 활용 문서</h2>
+                <button onclick="refreshRagDocs()" class="btn-refresh" id="refresh-btn">
+                    🔄 새로고침
+                </button>
+            </div>
+            <div class="rag-docs-container">
+                <div class="rag-doc-card">
+                    <h3>📄 매장 정보 문서</h3>
+                    <div id="rag-doc-store-info" class="rag-doc-content">
+                        <div class="loading-text">문서를 불러오는 중...</div>
+                    </div>
+                </div>
+                <div class="rag-doc-card">
+                    <h3>🍽️ 메뉴 정보 문서</h3>
+                    <div id="rag-doc-menus" class="rag-doc-content">
+                        <div class="loading-text">문서를 불러오는 중...</div>
+                    </div>
+                </div>
+                <div class="rag-doc-card">
+                    <h3>💬 리뷰 요약 문서</h3>
+                    <div id="rag-doc-reviews" class="rag-doc-content">
+                        <div class="loading-text">문서를 불러오는 중...</div>
+                    </div>
+                </div>
+            </div>
+            <div id="no-rag-docs" class="empty-state" style="display: none;">
+                <p>RAG 문서가 아직 생성되지 않았습니다.</p>
+                <button onclick="generateRagDocs()" class="btn-generate">문서 생성하기</button>
             </div>
         </div>
     </div>
@@ -320,6 +355,91 @@
     background: #218838;
 }
 
+.btn-refresh {
+    background: #6c757d;
+    color: white;
+    border: none;
+    padding: 8px 16px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 14px;
+}
+
+.btn-refresh:hover {
+    background: #5a6268;
+}
+
+.btn-generate {
+    background: #0066cc;
+    color: white;
+    border: none;
+    padding: 10px 20px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 14px;
+    margin-top: 16px;
+}
+
+.btn-generate:hover {
+    background: #0052a3;
+}
+
+.rag-docs-container {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+}
+
+.rag-doc-card {
+    background: white;
+    border-radius: 8px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+    overflow: hidden;
+}
+
+.rag-doc-card h3 {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+    padding: 16px 20px;
+    margin: 0;
+    font-size: 18px;
+}
+
+.rag-doc-content {
+    padding: 20px;
+    max-height: 400px;
+    overflow-y: auto;
+    line-height: 1.6;
+    color: #333;
+    background: #f8f9fa;
+}
+
+.rag-doc-content pre {
+    background: white;
+    padding: 12px;
+    border-radius: 4px;
+    border-left: 4px solid #667eea;
+    overflow-x: auto;
+}
+
+.rag-doc-content h1, .rag-doc-content h2, .rag-doc-content h3 {
+    color: #1a1a1a;
+    margin-top: 16px;
+    margin-bottom: 8px;
+}
+
+.loading-text {
+    text-align: center;
+    color: #666;
+    padding: 40px 20px;
+}
+
+.error-text {
+    text-align: center;
+    color: #dc3545;
+    padding: 40px 20px;
+}
+
 .menus-grid {
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
@@ -453,6 +573,8 @@
 <script>
 const storeId = {{ store_id }};
 let storeData = null;
+
+let ragDocsLoaded = false;
 
 document.addEventListener('DOMContentLoaded', function() {
     loadStoreDetail();
@@ -595,6 +717,95 @@ function showTab(tabName) {
     // 선택된 탭 활성화
     event.target.classList.add('active');
     document.getElementById(`tab-${tabName}`).classList.add('active');
+
+    // RAG 문서 탭이면 문서 로드
+    if (tabName === 'rag-docs' && !ragDocsLoaded) {
+        loadRagDocs();
+    }
+}
+
+async function loadRagDocs() {
+    try {
+        const response = await fetch(`/api/stores/${storeId}/rag-documents`);
+
+        if (!response.ok) {
+            throw new Error('RAG 문서를 불러올 수 없습니다.');
+        }
+
+        const data = await response.json();
+
+        if (data.documents && data.documents.length > 0) {
+            displayRagDoc('store-info', data.documents.find(d => d.type === 'store_info'));
+            displayRagDoc('menus', data.documents.find(d => d.type === 'menu_info'));
+            displayRagDoc('reviews', data.documents.find(d => d.type === 'review_summary'));
+            ragDocsLoaded = true;
+        } else {
+            document.querySelector('.rag-docs-container').style.display = 'none';
+            document.getElementById('no-rag-docs').style.display = 'block';
+        }
+    } catch (error) {
+        console.error('Error loading RAG docs:', error);
+        displayRagDocError('store-info');
+        displayRagDocError('menus');
+        displayRagDocError('reviews');
+    }
+}
+
+function displayRagDoc(docType, docData) {
+    const contentDiv = document.getElementById(`rag-doc-${docType}`);
+
+    if (docData && docData.content) {
+        contentDiv.innerHTML = marked.parse(docData.content);
+    } else {
+        contentDiv.innerHTML = '<div class="error-text">문서가 없습니다.</div>';
+    }
+}
+
+function displayRagDocError(docType) {
+    const contentDiv = document.getElementById(`rag-doc-${docType}`);
+    contentDiv.innerHTML = '<div class="error-text">문서를 불러오는데 실패했습니다.</div>';
+}
+
+async function refreshRagDocs() {
+    ragDocsLoaded = false;
+    document.getElementById('rag-doc-store-info').innerHTML = '<div class="loading-text">문서를 불러오는 중...</div>';
+    document.getElementById('rag-doc-menus').innerHTML = '<div class="loading-text">문서를 불러오는 중...</div>';
+    document.getElementById('rag-doc-reviews').innerHTML = '<div class="loading-text">문서를 불러오는 중...</div>';
+    await loadRagDocs();
+}
+
+async function generateRagDocs() {
+    const btn = event.target;
+    btn.disabled = true;
+    btn.textContent = '생성 중...';
+
+    try {
+        const response = await fetch('http://112.148.37.41:8002/api/generate-documents', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                store_id: storeId
+            })
+        });
+
+        const data = await response.json();
+
+        if (data.status === 'success') {
+            alert('RAG 문서가 성공적으로 생성되었습니다.');
+            document.querySelector('.rag-docs-container').style.display = 'flex';
+            document.getElementById('no-rag-docs').style.display = 'none';
+            await loadRagDocs();
+        } else {
+            throw new Error(data.message || '문서 생성에 실패했습니다.');
+        }
+    } catch (error) {
+        alert('문서 생성에 실패했습니다: ' + error.message);
+    } finally {
+        btn.disabled = false;
+        btn.textContent = '문서 생성하기';
+    }
 }
 
 function getStatusBadge(status) {

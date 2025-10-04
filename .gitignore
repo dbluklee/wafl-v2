@@ -1,2 +1,28 @@
 # .gitignore
 .env
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg-info/
+dist/
+build/
+
+# Virtual Environment
+venv/
+ENV/
+
+# Model files (임베딩 모델은 용량이 커서 제외)
+*.bin
+*.safetensors
+models/
+
+# IDE
+.vscode/
+.idea/
+
+# Logs
+*.log

@@ -1,0 +1,606 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WAFL RAG LLM 테스트</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 800px;
+            width: 100%;
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+            overflow: hidden;
+        }
+
+        .header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 30px;
+            text-align: center;
+            position: relative;
+        }
+
+        .header h1 {
+            font-size: 28px;
+            margin-bottom: 10px;
+        }
+
+        .header p {
+            font-size: 14px;
+            opacity: 0.9;
+        }
+
+        .back-button {
+            position: absolute;
+            left: 20px;
+            top: 50%;
+            transform: translateY(-50%);
+            background: rgba(255, 255, 255, 0.2);
+            color: white;
+            border: 2px solid white;
+            padding: 8px 16px;
+            border-radius: 8px;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s;
+            text-decoration: none;
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
+        }
+
+        .back-button:hover {
+            background: rgba(255, 255, 255, 0.3);
+            transform: translateY(-50%) scale(1.05);
+        }
+
+        .settings {
+            padding: 20px 30px;
+            background: #f7f9fc;
+            border-bottom: 1px solid #e0e0e0;
+        }
+
+        .settings-row {
+            display: flex;
+            gap: 15px;
+            margin-bottom: 15px;
+        }
+
+        .settings-group {
+            flex: 1;
+        }
+
+        .settings-group label {
+            display: block;
+            font-size: 12px;
+            color: #666;
+            margin-bottom: 5px;
+            font-weight: 600;
+        }
+
+        .settings-group input, .settings-group select {
+            width: 100%;
+            padding: 10px;
+            border: 2px solid #e0e0e0;
+            border-radius: 8px;
+            font-size: 14px;
+            transition: border-color 0.3s;
+        }
+
+        .settings-group input:focus, .settings-group select:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+
+        .btn-index {
+            width: 100%;
+            padding: 12px;
+            background: #667eea;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background 0.3s;
+        }
+
+        .btn-index:hover {
+            background: #5568d3;
+        }
+
+        .chat-container {
+            height: 500px;
+            overflow-y: auto;
+            padding: 30px;
+            background: white;
+        }
+
+        .message {
+            margin-bottom: 20px;
+            display: flex;
+            gap: 10px;
+        }
+
+        .message.user {
+            justify-content: flex-end;
+        }
+
+        .message-content {
+            max-width: 70%;
+            padding: 12px 18px;
+            border-radius: 18px;
+            font-size: 14px;
+            line-height: 1.6;
+        }
+
+        .message.user .message-content {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
+
+        .message.assistant .message-content {
+            background: #f0f2f5;
+            color: #333;
+        }
+
+        .message-badge {
+            font-size: 10px;
+            background: rgba(255, 255, 255, 0.3);
+            padding: 2px 8px;
+            border-radius: 10px;
+            margin-top: 5px;
+            display: inline-block;
+        }
+
+        .input-container {
+            padding: 20px 30px;
+            background: #f7f9fc;
+            border-top: 1px solid #e0e0e0;
+        }
+
+        .input-wrapper {
+            display: flex;
+            gap: 10px;
+        }
+
+        #messageInput {
+            flex: 1;
+            padding: 12px 18px;
+            border: 2px solid #e0e0e0;
+            border-radius: 25px;
+            font-size: 14px;
+            transition: border-color 0.3s;
+        }
+
+        #messageInput:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+
+        #sendButton {
+            padding: 12px 30px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            border-radius: 25px;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: transform 0.2s;
+        }
+
+        #sendButton:hover {
+            transform: scale(1.05);
+        }
+
+        #sendButton:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            transform: scale(1);
+        }
+
+        .loading {
+            display: inline-block;
+            width: 12px;
+            height: 12px;
+            border: 2px solid #f3f3f3;
+            border-top: 2px solid #667eea;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .status {
+            padding: 10px;
+            margin-top: 10px;
+            border-radius: 8px;
+            font-size: 12px;
+            text-align: center;
+        }
+
+        .status.success {
+            background: #d4edda;
+            color: #155724;
+        }
+
+        .status.error {
+            background: #f8d7da;
+            color: #721c24;
+        }
+
+        .char-counter {
+            font-size: 12px;
+            color: #666;
+            margin-top: 5px;
+            text-align: right;
+        }
+
+        .char-counter.warning {
+            color: #dc3545;
+            font-weight: 600;
+        }
+
+        .toast {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            background: #dc3545;
+            color: white;
+            padding: 12px 20px;
+            border-radius: 8px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+            font-size: 14px;
+            opacity: 0;
+            transform: translateY(-20px);
+            transition: all 0.3s ease;
+            z-index: 1000;
+        }
+
+        .toast.show {
+            opacity: 1;
+            transform: translateY(0);
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <a href="javascript:history.back()" class="back-button">
+                ← 뒤로가기
+            </a>
+            <h1>🍽️ WAFL RAG LLM</h1>
+            <p>매장 정보 챗봇 테스트</p>
+        </div>
+
+        <div class="settings">
+            <div class="settings-row">
+                <div class="settings-group">
+                    <label>매장 선택</label>
+                    <select id="storeId">
+                        <option value="">로딩 중...</option>
+                    </select>
+                </div>
+                <div class="settings-group">
+                    <label>카테고리</label>
+                    <select id="category">
+                        <option value="customer">Customer</option>
+                        <option value="owner">Owner</option>
+                    </select>
+                </div>
+            </div>
+            <div style="display: flex; gap: 10px;">
+                <button class="btn-index" style="flex: 1;" onclick="generateDocuments()">📝 문서 자동 생성</button>
+                <button class="btn-index" style="flex: 1;" onclick="indexDocuments()">📚 문서 인덱싱</button>
+            </div>
+            <div id="indexStatus"></div>
+        </div>
+
+        <div class="chat-container" id="chatContainer">
+            <div class="message assistant">
+                <div class="message-content">
+                    안녕하세요! 매장 정보를 안내해드리는 AI 어시스턴트입니다. 무엇을 도와드릴까요?
+                </div>
+            </div>
+        </div>
+
+        <div class="input-container">
+            <div class="input-wrapper">
+                <input
+                    type="text"
+                    id="messageInput"
+                    placeholder="메시지를 입력하세요... (최대 30자)"
+                    onkeypress="handleKeyPress(event)"
+                    oninput="updateCharCounter()"
+                    maxlength="30"
+                >
+                <button id="sendButton" onclick="sendMessage()">전송</button>
+            </div>
+            <div class="char-counter" id="charCounter">0 / 30자</div>
+        </div>
+    </div>
+
+    <div class="toast" id="toast"></div>
+
+    <script>
+        // 문자 수 카운터 업데이트
+        function updateCharCounter() {
+            const input = document.getElementById('messageInput');
+            const counter = document.getElementById('charCounter');
+            const currentLength = input.value.length;
+
+            counter.textContent = `${currentLength} / 30자`;
+
+            if (currentLength >= 30) {
+                counter.classList.add('warning');
+            } else {
+                counter.classList.remove('warning');
+            }
+        }
+
+        // 토스트 알림 표시
+        function showToast(message) {
+            const toast = document.getElementById('toast');
+            toast.textContent = message;
+            toast.classList.add('show');
+
+            setTimeout(() => {
+                toast.classList.remove('show');
+            }, 2000);
+        }
+
+        // 페이지 로드 시 매장 목록 가져오기
+        async function loadStores() {
+            try {
+                const response = await fetch('api/stores', {
+                    headers: {
+                        'Accept': 'application/json'
+                    }
+                });
+                const data = await response.json();
+
+                const storeSelect = document.getElementById('storeId');
+                storeSelect.innerHTML = '';
+
+                if (data.stores && data.stores.length > 0) {
+                    data.stores.forEach(store => {
+                        const option = document.createElement('option');
+                        option.value = store.id;
+                        option.textContent = `${store.name} (ID: ${store.id})`;
+                        storeSelect.appendChild(option);
+                    });
+                } else {
+                    storeSelect.innerHTML = '<option value="">매장 없음</option>';
+                }
+            } catch (error) {
+                console.error('매장 목록 로드 오류:', error);
+                const storeSelect = document.getElementById('storeId');
+                storeSelect.innerHTML = '<option value="">오류 발생</option>';
+            }
+        }
+
+        // 페이지 로드 시 실행
+        window.addEventListener('DOMContentLoaded', loadStores);
+
+        async function generateDocuments() {
+            const storeId = document.getElementById('storeId').value;
+            const statusDiv = document.getElementById('indexStatus');
+
+            if (!storeId) {
+                statusDiv.innerHTML = '<div class="status error">❌ 매장을 선택하세요</div>';
+                return;
+            }
+
+            statusDiv.innerHTML = '<div class="loading"></div>';
+
+            try {
+                const response = await fetch('api/generate-documents', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        store_id: parseInt(storeId),
+                        category: 'customer'  // 기본값
+                    })
+                });
+
+                const data = await response.json();
+
+                if (data.status === 'success') {
+                    const docCount = data.data.documents.length;
+                    statusDiv.innerHTML = `<div class="status success">✅ 문서 생성 완료: ${docCount}개 파일</div>`;
+                } else {
+                    statusDiv.innerHTML = `<div class="status error">❌ ${data.message}</div>`;
+                }
+
+                setTimeout(() => {
+                    statusDiv.innerHTML = '';
+                }, 5000);
+
+            } catch (error) {
+                statusDiv.innerHTML = `<div class="status error">❌ 오류: ${error.message}</div>`;
+            }
+        }
+
+        async function indexDocuments() {
+            const storeId = document.getElementById('storeId').value;
+            const category = document.getElementById('category').value;
+            const statusDiv = document.getElementById('indexStatus');
+
+            statusDiv.innerHTML = '<div class="loading"></div>';
+
+            try {
+                const response = await fetch('api/index-documents', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        store_id: parseInt(storeId),
+                        category: category
+                    })
+                });
+
+                const data = await response.json();
+
+                if (data.status === 'success') {
+                    statusDiv.innerHTML = `<div class="status success">✅ 인덱싱 완료: ${data.indexed_chunks}개 청크</div>`;
+                } else {
+                    statusDiv.innerHTML = `<div class="status error">❌ ${data.message}</div>`;
+                }
+
+                setTimeout(() => {
+                    statusDiv.innerHTML = '';
+                }, 5000);
+
+            } catch (error) {
+                statusDiv.innerHTML = `<div class="status error">❌ 오류: ${error.message}</div>`;
+            }
+        }
+
+        async function sendMessage() {
+            const input = document.getElementById('messageInput');
+            const message = input.value.trim();
+
+            if (!message) return;
+
+            // 30자 제한 체크
+            if (message.length > 30) {
+                showToast('⚠️ 질문은 30자 이내로 입력해주세요!');
+                return;
+            }
+
+            const storeId = document.getElementById('storeId').value;
+            const category = document.getElementById('category').value;
+
+            // 사용자 메시지 추가
+            addMessage(message, 'user');
+            input.value = '';
+            updateCharCounter();
+
+            // 전송 버튼 비활성화
+            const sendButton = document.getElementById('sendButton');
+            sendButton.disabled = true;
+            sendButton.innerHTML = '<div class="loading"></div>';
+
+            try {
+                const response = await fetch('api/chat', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        message: message,
+                        store_id: parseInt(storeId),
+                        category: category
+                    })
+                });
+
+                const data = await response.json();
+
+                if (data.error) {
+                    addMessage(`오류: ${data.error}`, 'assistant');
+                } else {
+                    addMessage(data.response, 'assistant', data.used_rag);
+
+                    // 디버그 정보 콘솔 출력
+                    if (data.debug) {
+                        console.log('='.repeat(80));
+                        console.log('🔍 디버그 정보');
+                        console.log('='.repeat(80));
+                        console.log('📊 전체 디버그 데이터:', data.debug);
+
+                        if (data.debug.agent) {
+                            console.log('\n🤖 [에이전트] RAG 필요 여부 판단');
+                            console.log('  모델:', data.debug.agent.agent_model || 'N/A');
+                            console.log('  프롬프트:\n', data.debug.agent.agent_prompt || 'N/A');
+                            console.log('  응답:', data.debug.agent.agent_response || 'N/A');
+                        }
+
+                        if (data.debug.rag) {
+                            console.log('\n📚 [RAG] 문서 검색 및 응답 생성');
+                            console.log('  LLM 모델:', data.debug.rag.llm_model || 'N/A');
+                            if (data.debug.rag.retrieved_documents) {
+                                console.log('  검색된 문서:', data.debug.rag.retrieved_documents.length, '개');
+                                data.debug.rag.retrieved_documents.forEach((doc, idx) => {
+                                    console.log(`    [${idx + 1}] 유사도: ${doc.score.toFixed(4)}`);
+                                    console.log(`        미리보기: ${doc.text_preview.substring(0, 100)}...`);
+                                });
+                            }
+                            console.log('  컨텍스트 길이:', data.debug.rag.context_length || 'N/A', '문자');
+                            console.log('  최종 프롬프트:\n', data.debug.rag.final_prompt || 'N/A');
+                            console.log('  LLM 응답:\n', data.debug.rag.llm_response || 'N/A');
+                        }
+
+                        if (data.debug.chat) {
+                            console.log('\n💬 [일반 대화]');
+                            console.log('  모델:', data.debug.chat.chat_model || 'N/A');
+                            console.log('  프롬프트:\n', data.debug.chat.chat_prompt || 'N/A');
+                            console.log('  응답:', data.debug.chat.chat_response || 'N/A');
+                        }
+
+                        console.log('='.repeat(80));
+                    }
+                }
+
+            } catch (error) {
+                addMessage(`오류: ${error.message}`, 'assistant');
+            } finally {
+                sendButton.disabled = false;
+                sendButton.innerHTML = '전송';
+            }
+        }
+
+        function addMessage(text, type, usedRag = null) {
+            const chatContainer = document.getElementById('chatContainer');
+            const messageDiv = document.createElement('div');
+            messageDiv.className = `message ${type}`;
+
+            let badgeHtml = '';
+            if (usedRag !== null) {
+                badgeHtml = `<div class="message-badge">${usedRag ? '📚 RAG' : '💬 일반'}</div>`;
+            }
+
+            messageDiv.innerHTML = `
+                <div class="message-content">
+                    ${text}
+                    ${badgeHtml}
+                </div>
+            `;
+
+            chatContainer.appendChild(messageDiv);
+            chatContainer.scrollTop = chatContainer.scrollHeight;
+        }
+
+        function handleKeyPress(event) {
+            if (event.key === 'Enter') {
+                sendMessage();
+            }
+        }
+    </script>
+</body>
+</html>

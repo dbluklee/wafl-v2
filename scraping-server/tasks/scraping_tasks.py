@@ -10,6 +10,7 @@ from selenium.webdriver.support import expected_conditions as EC
 import time
 import logging
 import traceback
+import os
 
 # 로깅 설정
 logging.basicConfig(level=logging.INFO)
@@ -441,6 +442,7 @@ def generate_review_summary(self, store_id):
     """리뷰 요약 생성 태스크"""
     try:
         from utils.llm_summarizer import LLMSummarizer
+        import requests
 
         logger.info(f"매장 {store_id}의 리뷰 요약 생성 시작")
 
@@ -449,6 +451,41 @@ def generate_review_summary(self, store_id):
         summary = summarizer.generate_review_summary(store_id)
 
         logger.info(f"매장 {store_id}의 리뷰 요약 생성 완료")
+
+        # RAG 서버 URL 설정
+        rag_server_url = os.getenv("RAG_SERVER_URL", "http://localhost:8002")
+
+        # MD 파일 생성 및 등록
+        try:
+            logger.info(f"매장 {store_id}의 문서 생성 시작")
+            doc_response = requests.post(
+                f"{rag_server_url}/api/generate-documents",
+                json={"store_id": store_id},
+                timeout=30
+            )
+
+            if doc_response.status_code == 200:
+                logger.info(f"매장 {store_id}의 문서 생성 완료: {doc_response.json()}")
+            else:
+                logger.error(f"문서 생성 실패: {doc_response.status_code} - {doc_response.text}")
+        except Exception as e:
+            logger.error(f"문서 생성 API 호출 실패: {e}")
+
+        # RAG 인덱싱 (customer 카테고리)
+        try:
+            logger.info(f"매장 {store_id}의 RAG 인덱싱 시작")
+            index_response = requests.post(
+                f"{rag_server_url}/api/index-documents",
+                json={"store_id": store_id, "category": "customer"},
+                timeout=60
+            )
+
+            if index_response.status_code == 200:
+                logger.info(f"매장 {store_id}의 RAG 인덱싱 완료: {index_response.json()}")
+            else:
+                logger.error(f"RAG 인덱싱 실패: {index_response.status_code} - {index_response.text}")
+        except Exception as e:
+            logger.error(f"RAG 인덱싱 API 호출 실패: {e}")
 
         return {
             'status': 'completed',

@@ -457,6 +457,44 @@ async def regenerate_summary_proxy(store_id: int):
         logger.error(f"요약 재생성 오류: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
+@app.get("/api/stores/{store_id}/rag-documents")
+async def get_rag_documents(store_id: int):
+    """매장의 RAG 문서 내용 조회 API"""
+    try:
+        import os
+        from pathlib import Path
+
+        # RAG 문서 저장 경로
+        docs_dir = Path("/app/media/documents")
+
+        documents = []
+        doc_types = [
+            ("store_info", f"store_{store_id}_info.md"),
+            ("menu_info", f"store_{store_id}_menus.md"),
+            ("review_summary", f"store_{store_id}_reviews.md")
+        ]
+
+        for doc_type, filename in doc_types:
+            file_path = docs_dir / filename
+            if file_path.exists():
+                with open(file_path, 'r', encoding='utf-8') as f:
+                    content = f.read()
+                    documents.append({
+                        "type": doc_type,
+                        "filename": filename,
+                        "content": content
+                    })
+
+        return {
+            "status": "success",
+            "store_id": store_id,
+            "documents": documents
+        }
+
+    except Exception as e:
+        logger.error(f"RAG 문서 조회 오류: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
 @app.get("/health")
 async def health_check():
     """헬스체크 API"""

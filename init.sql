@@ -104,6 +104,26 @@ CREATE TRIGGER update_scraping_tasks_updated_at
     FOR EACH ROW
     EXECUTE FUNCTION update_updated_at_column();
 
+-- RAG 문서 관리 테이블
+CREATE TABLE rag_documents (
+    id SERIAL PRIMARY KEY,
+    store_id INTEGER NOT NULL REFERENCES stores(id) ON DELETE CASCADE,
+    category VARCHAR(50) NOT NULL CHECK (category IN ('customer', 'owner')),
+    doc_path VARCHAR(500) NOT NULL, -- md 문서 경로
+    created_at TIMESTAMP DEFAULT NOW(),
+    updated_at TIMESTAMP DEFAULT NOW()
+);
+
+-- 인덱스 생성
+CREATE INDEX idx_rag_documents_store_id ON rag_documents(store_id);
+CREATE INDEX idx_rag_documents_category ON rag_documents(category);
+
+-- 트리거 생성
+CREATE TRIGGER update_rag_documents_updated_at
+    BEFORE UPDATE ON rag_documents
+    FOR EACH ROW
+    EXECUTE FUNCTION update_updated_at_column();
+
 -- 초기 데이터 삽입 (테스트용)
 INSERT INTO stores (
     store_name,
@@ -122,6 +142,10 @@ INSERT INTO stores (
     'https://naver.me/FvExPxZs',
     '1054849411'
 );
+
+-- RAG 문서 초기 데이터
+INSERT INTO rag_documents (store_id, category, doc_path) VALUES
+(1, 'customer', '/app/media/documents/test_cafe_customer.md');
 
 -- 권한 설정
 GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA public TO wafl_user;
