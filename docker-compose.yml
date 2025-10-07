@@ -43,6 +43,31 @@ services:
       - wafl-network
     restart: unless-stopped
 
+  # 대화 전용 PostgreSQL (보안 격리)
+  wafl-conversation-db:
+    image: postgres:15-alpine
+    container_name: wafl-conversation-db
+    environment:
+      POSTGRES_DB: conversation_db
+      POSTGRES_USER: conv_secure_user
+      POSTGRES_PASSWORD: ${CONVERSATION_DB_PASSWORD:-conv_secure_pass_2024!}
+    ports:
+      - "55433:5432"  # 외부: 55433, 내부: 5432
+    volumes:
+      - conversation_db_data:/var/lib/postgresql/data
+      - ./conversation-db/init.sql:/docker-entrypoint-initdb.d/init.sql
+      - ./conversation-db/backups:/backups  # 백업 디렉토리
+    networks:
+      - wafl-network
+    restart: unless-stopped
+    # 보안 강화: 메모리 제한 및 헬스체크
+    mem_limit: 2g
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U conv_secure_user -d conversation_db"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
   # 마이크로서비스들
   wafl-web-server:
     build:
@@ -178,6 +203,8 @@ services:
       - ./rag-server:/app
     environment:
       - DATABASE_URL=postgresql://wafl_user:wafl_password@wafl-postgresql:5432/wafl_db
+      - CONVERSATION_DB_URL=postgresql://conv_secure_user:${CONVERSATION_DB_PASSWORD:-conv_secure_pass_2024!}@wafl-conversation-db:5432/conversation_db
+      - CONVERSATION_ENCRYPTION_KEY=${CONVERSATION_ENCRYPTION_KEY:-your-secure-32-byte-encryption-key-here}
       - MILVUS_HOST=wafl-milvus
       - MILVUS_PORT=19530
       - OLLAMA_MAIN_URL=http://112.148.37.41:1884
@@ -186,6 +213,7 @@ services:
       - SERVICE_PORT=8002
     depends_on:
       - wafl-postgresql
+      - wafl-conversation-db
       - wafl-milvus
     networks:
       - wafl-network
@@ -195,6 +223,7 @@ services:
 volumes:
   postgresql_data:
   redis_data:
+  conversation_db_data:  # 대화 전용 DB 볼륨
   milvus_etcd:
   milvus_minio:
   milvus_data:

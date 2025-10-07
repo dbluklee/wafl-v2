@@ -264,6 +264,41 @@
             font-weight: 600;
         }
 
+        .session-status {
+            padding: 8px 15px;
+            background: rgba(255, 255, 255, 0.2);
+            border-radius: 20px;
+            font-size: 12px;
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
+            position: absolute;
+            right: 20px;
+            top: 50%;
+            transform: translateY(-50%);
+        }
+
+        .session-status.active {
+            background: rgba(76, 175, 80, 0.3);
+        }
+
+        .session-status.inactive {
+            background: rgba(244, 67, 54, 0.3);
+        }
+
+        .session-status .dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: white;
+            animation: pulse 2s infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+
         .toast {
             position: fixed;
             top: 20px;
@@ -294,6 +329,10 @@
             </a>
             <h1>🍽️ WAFL RAG LLM</h1>
             <p>매장 정보 챗봇 테스트</p>
+            <div class="session-status active" id="sessionStatus">
+                <span class="dot"></span>
+                <span id="sessionText">대화 활성</span>
+            </div>
         </div>
 
         <div class="settings">
@@ -346,6 +385,109 @@
     <div class="toast" id="toast"></div>
 
     <script>
+        // 대화 세션 관리 변수
+        let conversationUuid = sessionStorage.getItem('conversationUuid');  // 현재 대화 세션 UUID (세션 저장소에서 복원)
+        let inactivityTimer = null;   // 비활성 타이머
+        let isSessionActive = sessionStorage.getItem('isSessionActive') !== 'false';   // 세션 활성 상태
+        const INACTIVITY_TIMEOUT = 60000; // 1분 (60초)
+
+        // 페이지 로드시 세션 상태 복원
+        window.addEventListener('DOMContentLoaded', () => {
+            if (conversationUuid) {
+                console.log('🔄 기존 대화 세션 복원:', conversationUuid);
+                updateSessionStatus(isSessionActive);
+
+                // 세션이 활성 상태면 타이머 시작
+                if (isSessionActive) {
+                    resetInactivityTimer();
+                }
+            }
+        });
+
+        // 세션 상태 업데이트
+        function updateSessionStatus(active) {
+            isSessionActive = active;
+            sessionStorage.setItem('isSessionActive', active ? 'true' : 'false');
+
+            const statusElement = document.getElementById('sessionStatus');
+            const textElement = document.getElementById('sessionText');
+
+            if (active) {
+                statusElement.className = 'session-status active';
+                textElement.textContent = '대화 활성';
+            } else {
+                statusElement.className = 'session-status inactive';
+                textElement.textContent = '대화 종료';
+            }
+        }
+
+        // 비활성 타이머 리셋
+        function resetInactivityTimer() {
+            // 기존 타이머 제거
+            if (inactivityTimer) {
+                clearTimeout(inactivityTimer);
+            }
+
+            // 세션이 활성 상태일 때만 타이머 설정
+            if (isSessionActive && conversationUuid) {
+                inactivityTimer = setTimeout(async () => {
+                    console.log('⏱️ 1분 동안 입력이 없어 대화를 종료합니다.');
+                    await endConversation();
+                }, INACTIVITY_TIMEOUT);
+            }
+        }
+
+        // 대화 종료
+        async function endConversation() {
+            if (!conversationUuid || !isSessionActive) {
+                return;
+            }
+
+            try {
+                const response = await fetch(`api/conversations/${conversationUuid}/end`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    }
+                });
+
+                const data = await response.json();
+
+                if (data.status === 'success') {
+                    console.log('✅ 대화 종료:', conversationUuid);
+                    updateSessionStatus(false);
+
+                    // 세션 저장소에서 UUID 제거 (종료된 세션은 재사용 안함)
+                    sessionStorage.removeItem('conversationUuid');
+                    conversationUuid = null;
+
+                    // 비활성 타이머 제거
+                    if (inactivityTimer) {
+                        clearTimeout(inactivityTimer);
+                        inactivityTimer = null;
+                    }
+
+                    // 종료 메시지 표시
+                    addMessage('대화가 종료되었습니다. 새로운 질문을 입력하면 새 대화가 시작됩니다.', 'assistant');
+                } else {
+                    console.error('❌ 대화 종료 실패:', data.message);
+                }
+            } catch (error) {
+                console.error('❌ 대화 종료 오류:', error);
+            }
+        }
+
+        // 페이지 이탈시 대화 종료
+        window.addEventListener('beforeunload', (event) => {
+            if (conversationUuid && isSessionActive) {
+                // 동기 방식으로 전송 (페이지 이탈 전에 완료)
+                navigator.sendBeacon(
+                    `api/conversations/${conversationUuid}/end`,
+                    new Blob([JSON.stringify({})], { type: 'application/json' })
+                );
+            }
+        });
+
         // 문자 수 카운터 업데이트
         function updateCharCounter() {
             const input = document.getElementById('messageInput');
@@ -497,10 +639,20 @@
             const storeId = document.getElementById('storeId').value;
             const category = document.getElementById('category').value;
 
+            // 종료된 세션이면 새로 시작
+            if (!isSessionActive) {
+                conversationUuid = null;
+                updateSessionStatus(true);
+                console.log('🆕 새로운 대화 세션 시작');
+            }
+
             // 사용자 메시지 추가
             addMessage(message, 'user');
             input.value = '';
             updateCharCounter();
+
+            // 비활성 타이머 리셋
+            resetInactivityTimer();
 
             // 전송 버튼 비활성화
             const sendButton = document.getElementById('sendButton');
@@ -508,16 +660,23 @@
             sendButton.innerHTML = '<div class="loading"></div>';
 
             try {
+                const requestBody = {
+                    message: message,
+                    store_id: parseInt(storeId),
+                    category: category
+                };
+
+                // 기존 대화 UUID가 있으면 포함
+                if (conversationUuid) {
+                    requestBody.conversation_uuid = conversationUuid;
+                }
+
                 const response = await fetch('api/chat', {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
                     },
-                    body: JSON.stringify({
-                        message: message,
-                        store_id: parseInt(storeId),
-                        category: category
-                    })
+                    body: JSON.stringify(requestBody)
                 });
 
                 const data = await response.json();
@@ -525,6 +684,14 @@
                 if (data.error) {
                     addMessage(`오류: ${data.error}`, 'assistant');
                 } else {
+                    // 첫 메시지면 UUID 저장 (세션 저장소에도 저장)
+                    if (!conversationUuid && data.conversation_uuid) {
+                        conversationUuid = data.conversation_uuid;
+                        sessionStorage.setItem('conversationUuid', conversationUuid);
+                        console.log('💾 대화 UUID 저장 (sessionStorage):', conversationUuid);
+                        updateSessionStatus(true);
+                    }
+
                     addMessage(data.response, 'assistant', data.used_rag);
 
                     // 디버그 정보 콘솔 출력
@@ -601,6 +768,11 @@
                 sendMessage();
             }
         }
+
+        // 입력 필드에서 타이핑할 때마다 타이머 리셋
+        document.getElementById('messageInput').addEventListener('input', () => {
+            resetInactivityTimer();
+        });
     </script>
 </body>
 </html>

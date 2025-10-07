@@ -5,10 +5,13 @@ from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel
 import os
 import logging
+import time
+from typing import Optional
 
 from agent import Agent
 from rag_pipeline import RAGPipeline
 from document_generator import DocumentGenerator
+from conversation_service import get_conversation_service
 
 # 로깅 설정
 logging.basicConfig(level=logging.INFO)
@@ -24,11 +27,20 @@ agent = Agent()
 rag_pipeline = RAGPipeline()
 doc_generator = DocumentGenerator()
 
+# 대화 저장 서비스 초기화
+try:
+    conversation_service = get_conversation_service()
+    logger.info("✅ 대화 저장 서비스 초기화 완료")
+except Exception as e:
+    logger.error(f"⚠️ 대화 저장 서비스 초기화 실패: {str(e)}")
+    conversation_service = None
+
 
 class ChatRequest(BaseModel):
     message: str
     store_id: int
     category: str = "customer"
+    conversation_uuid: Optional[str] = None  # 기존 대화 세션 UUID (선택)
 
 
 class DocumentIndexRequest(BaseModel):
@@ -43,12 +55,33 @@ async def root(request: Request):
 
 
 @app.post("/api/chat")
-async def chat(request: ChatRequest):
-    """채팅 엔드포인트"""
+async def chat(request: ChatRequest, http_request: Request):
+    """채팅 엔드포인트 (대화 저장 포함)"""
+    start_time = time.time()
+    conversation_uuid = request.conversation_uuid
+
     try:
         logger.info("🚀 " + "="*76)
         logger.info(f"🚀 새로운 채팅 요청: store_id={request.store_id}, message={request.message}")
         logger.info("🚀 " + "="*76)
+
+        # 대화 세션 생성 또는 기존 세션 사용
+        if conversation_service and not conversation_uuid:
+            try:
+                # 클라이언트 정보 추출
+                client_ip = http_request.client.host if http_request.client else None
+                user_agent = http_request.headers.get("user-agent")
+
+                # 새 대화 세션 생성
+                conversation_uuid = conversation_service.create_conversation(
+                    store_id=request.store_id,
+                    category=request.category,
+                    client_ip=client_ip,
+                    user_agent=user_agent
+                )
+                logger.info(f"🔐 대화 세션 생성: {conversation_uuid}")
+            except Exception as e:
+                logger.error(f"⚠️ 대화 세션 생성 실패: {str(e)}")
 
         # 에이전트가 RAG 필요 여부 판단
         needs_rag, agent_debug = await agent.needs_rag(request.message)
@@ -58,6 +91,9 @@ async def chat(request: ChatRequest):
             "used_rag": needs_rag
         }
 
+        rag_doc_count = None
+        rag_max_score = None
+
         if needs_rag:
             # RAG 파이프라인 실행
             response, rag_debug = await rag_pipeline.query(
@@ -66,18 +102,45 @@ async def chat(request: ChatRequest):
                 category=request.category
             )
             debug_info["rag"] = rag_debug
+
+            # RAG 메타데이터 추출
+            if "retrieved_documents" in rag_debug:
+                rag_doc_count = len(rag_debug["retrieved_documents"])
+                if rag_doc_count > 0:
+                    rag_max_score = rag_debug["retrieved_documents"][0].get("score")
         else:
             # 일반 대화
             response, chat_debug = await agent.chat(request.message)
             debug_info["chat"] = chat_debug
 
+        # 응답 시간 계산
+        response_time_ms = int((time.time() - start_time) * 1000)
+
+        # 대화 저장 (암호화)
+        if conversation_service and conversation_uuid:
+            try:
+                message_id = conversation_service.save_message(
+                    conversation_uuid=conversation_uuid,
+                    user_message=request.message,
+                    bot_response=response,
+                    used_rag=needs_rag,
+                    response_time_ms=response_time_ms,
+                    rag_doc_count=rag_doc_count,
+                    rag_max_score=rag_max_score
+                )
+                logger.info(f"🔐 대화 암호화 저장 완료: message_id={message_id}")
+            except Exception as e:
+                logger.error(f"⚠️ 대화 저장 실패: {str(e)}")
+
         logger.info("✅ " + "="*76)
-        logger.info(f"✅ 채팅 완료: 응답 길이 = {len(response)} 문자")
+        logger.info(f"✅ 채팅 완료: 응답 길이 = {len(response)} 문자, 응답 시간 = {response_time_ms}ms")
         logger.info("✅ " + "="*76 + "\n")
 
         return JSONResponse({
             "response": response,
             "used_rag": needs_rag,
+            "conversation_uuid": conversation_uuid,
+            "response_time_ms": response_time_ms,
             "debug": debug_info
         })
 
@@ -160,6 +223,102 @@ async def get_stores():
 async def health():
     """헬스 체크"""
     return {"status": "healthy", "service": "rag-server"}
+
+
+# =====================================================================
+# 대화 관리 API
+# =====================================================================
+
+@app.get("/api/conversations/{conversation_uuid}")
+async def get_conversation(conversation_uuid: str, decrypt: bool = False):
+    """
+    특정 대화 세션의 메시지 조회
+
+    Args:
+        conversation_uuid: 대화 세션 UUID
+        decrypt: 메시지 복호화 여부 (기본: False)
+    """
+    try:
+        if not conversation_service:
+            return JSONResponse(
+                {"error": "대화 저장 서비스를 사용할 수 없습니다"},
+                status_code=503
+            )
+
+        messages = conversation_service.get_conversation_messages(
+            conversation_uuid=conversation_uuid,
+            decrypt=decrypt
+        )
+
+        return JSONResponse({
+            "conversation_uuid": conversation_uuid,
+            "message_count": len(messages),
+            "messages": messages
+        })
+
+    except Exception as e:
+        logger.error(f"대화 조회 오류: {str(e)}")
+        return JSONResponse(
+            {"error": str(e)},
+            status_code=500
+        )
+
+
+@app.post("/api/conversations/{conversation_uuid}/end")
+async def end_conversation_session(conversation_uuid: str):
+    """대화 세션 종료"""
+    try:
+        if not conversation_service:
+            return JSONResponse(
+                {"error": "대화 저장 서비스를 사용할 수 없습니다"},
+                status_code=503
+            )
+
+        conversation_service.end_conversation(conversation_uuid)
+
+        return JSONResponse({
+            "status": "success",
+            "message": "대화 세션이 종료되었습니다",
+            "conversation_uuid": conversation_uuid
+        })
+
+    except Exception as e:
+        logger.error(f"대화 종료 오류: {str(e)}")
+        return JSONResponse(
+            {"error": str(e)},
+            status_code=500
+        )
+
+
+@app.get("/api/stores/{store_id}/conversation-statistics")
+async def get_conversation_statistics(store_id: int, days: int = 30):
+    """
+    매장의 대화 통계 조회
+
+    Args:
+        store_id: 매장 ID
+        days: 조회 기간 (일, 기본: 30일)
+    """
+    try:
+        if not conversation_service:
+            return JSONResponse(
+                {"error": "대화 저장 서비스를 사용할 수 없습니다"},
+                status_code=503
+            )
+
+        stats = conversation_service.get_store_statistics(
+            store_id=store_id,
+            days=days
+        )
+
+        return JSONResponse(stats)
+
+    except Exception as e:
+        logger.error(f"통계 조회 오류: {str(e)}")
+        return JSONResponse(
+            {"error": str(e)},
+            status_code=500
+        )
 
 
 if __name__ == "__main__":
