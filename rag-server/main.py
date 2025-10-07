@@ -8,11 +8,15 @@ import logging
 import time
 from typing import Optional
 
-from agent import Agent
+from agent import Agent  # 기존 Agent (백업용, 추후 제거 예정)
+from router import get_router
+from tool_executor import get_tool_executor
 from rag_pipeline import RAGPipeline
 from document_generator import DocumentGenerator
 from conversation_service import get_conversation_service
 from conversation_logger import get_conversation_logger
+import ollama
+import os
 
 # 로깅 설정
 logging.basicConfig(level=logging.INFO)
@@ -24,9 +28,16 @@ app = FastAPI(title="WAFL RAG LLM Server")
 templates = Jinja2Templates(directory="templates")
 
 # 에이전트 및 RAG 파이프라인 초기화
-agent = Agent()
+agent = Agent()  # 기존 Agent (백업용)
+router = get_router()  # 지능형 라우터
+tool_executor = get_tool_executor()  # 툴 실행기
 rag_pipeline = RAGPipeline()
 doc_generator = DocumentGenerator()
+
+# 메인 LLM 클라이언트 (SIMPLE_QA 및 LLM-Interpreted 툴용)
+main_llm_url = os.getenv("OLLAMA_MAIN_URL", "http://112.148.37.41:1884")
+main_llm_client = ollama.Client(host=main_llm_url)
+main_llm_model = "gemma3:27b-it-q4_K_M"
 
 # 대화 저장 서비스 초기화
 try:
@@ -54,11 +65,161 @@ class ChatRequest(BaseModel):
     store_id: int
     category: str = "customer"
     conversation_uuid: Optional[str] = None  # 기존 대화 세션 UUID (선택)
+    language: Optional[str] = "ko"  # 사용자 언어 설정 (ko, en, ja, zh)
 
 
 class DocumentIndexRequest(BaseModel):
     store_id: int
     category: str = "customer"
+
+
+async def interpret_tool_result_with_llm(
+    user_message: str,
+    tool_name: str,
+    tool_result: dict,
+    language: str = "ko"
+) -> str:
+    """
+    LLM-Interpreted 툴 결과를 Gemma3로 자연어 해석
+
+    Args:
+        user_message: 사용자 메시지
+        tool_name: 실행된 툴 이름
+        tool_result: 툴 실행 결과
+        language: 응답 언어 (ko, en, ja, zh)
+
+    Returns:
+        자연어 응답
+    """
+    try:
+        # 툴 결과를 문자열로 변환
+        import json
+        result_str = json.dumps(tool_result, ensure_ascii=False, indent=2)
+
+        # 언어별 지시
+        language_instructions = {
+            "ko": "한국어로 답변하세요.",
+            "en": "Answer in English.",
+            "ja": "日本語で答えてください。",
+            "zh": "用中文回答。"
+        }
+
+        prompt = f"""You are a friendly store assistant.
+The system has retrieved the following data. Please respond naturally to the customer based on this data.
+
+Customer question: {user_message}
+Function executed: {tool_name}
+Query results:
+{result_str}
+
+Response rules:
+1. Keep your answer concise, within 50 characters
+2. Deliver only the key points of the data
+3. Explain naturally and kindly
+4. Format numbers for readability (e.g., 1500000 → 1.5M or 150만원)
+5. Mention trends or insights briefly if any
+
+**IMPORTANT: {language_instructions.get(language, language_instructions["ko"])}**
+
+Answer:"""
+
+        response = main_llm_client.generate(
+            model=main_llm_model,
+            prompt=prompt
+        )
+
+        answer = response['response'].strip()
+
+        # 50자 제한 체크
+        more_messages = {
+            "ko": "\n\n더 자세히 설명해드릴까요?",
+            "en": "\n\nWould you like more details?",
+            "ja": "\n\nもっと詳しく説明しましょうか？",
+            "zh": "\n\n需要更详细的说明吗？"
+        }
+
+        if len(answer) > 50:
+            answer = answer[:50] + "..."
+            answer += more_messages.get(language, more_messages["ko"])
+
+        return answer
+
+    except Exception as e:
+        logger.error(f"LLM 해석 오류: {str(e)}")
+        error_messages = {
+            "ko": "데이터 조회는 완료했지만, 설명 중 오류가 발생했습니다.",
+            "en": "Data retrieval completed, but an error occurred during explanation.",
+            "ja": "データ検索は完了しましたが、説明中にエラーが発生しました。",
+            "zh": "数据检索已完成，但在解释过程中发生了错误。"
+        }
+        return error_messages.get(language, error_messages["ko"])
+
+
+async def simple_chat_with_llm(user_message: str, language: str = "ko") -> str:
+    """
+    일반 대화 처리 (SIMPLE_QA)
+
+    Args:
+        user_message: 사용자 메시지
+        language: 응답 언어 (ko, en, ja, zh)
+
+    Returns:
+        LLM 응답
+    """
+    try:
+        # 언어별 지시
+        language_instructions = {
+            "ko": "한국어로 답변하세요.",
+            "en": "Answer in English.",
+            "ja": "日本語で答えてください。",
+            "zh": "用中文回答。"
+        }
+
+        prompt = f"""You are a friendly store assistant.
+
+Response rules:
+1. Keep your answer concise, within 50 characters
+2. Deliver only the key points the customer wants
+3. Be kind but get to the point
+4. Skip unnecessary explanations
+5. **Important**: Never make up information you don't know
+6. If uncertain, say "I'm not sure. Please ask a staff member for assistance"
+
+**IMPORTANT: {language_instructions.get(language, language_instructions["ko"])}**
+
+User: {user_message}
+Assistant:"""
+
+        response = main_llm_client.generate(
+            model=main_llm_model,
+            prompt=prompt
+        )
+
+        answer = response['response'].strip()
+
+        # 50자 제한 체크
+        more_messages = {
+            "ko": "\n\n더 자세히 설명해드릴까요?",
+            "en": "\n\nWould you like more details?",
+            "ja": "\n\nもっと詳しく説明しましょうか？",
+            "zh": "\n\n需要更详细的说明吗？"
+        }
+
+        if len(answer) > 50:
+            answer = answer[:50] + "..."
+            answer += more_messages.get(language, more_messages["ko"])
+
+        return answer
+
+    except Exception as e:
+        logger.error(f"일반 대화 오류: {str(e)}")
+        error_messages = {
+            "ko": "죄송합니다. 일시적인 오류가 발생했습니다.",
+            "en": "Sorry, a temporary error has occurred.",
+            "ja": "申し訳ありません。一時的なエラーが発生しました。",
+            "zh": "抱歉，发生了临时错误。"
+        }
+        return error_messages.get(language, error_messages["ko"])
 
 
 @app.get("/", response_class=HTMLResponse)
@@ -96,23 +257,68 @@ async def chat(request: ChatRequest, http_request: Request):
             except Exception as e:
                 logger.error(f"⚠️ 대화 세션 생성 실패: {str(e)}")
 
-        # 에이전트가 RAG 필요 여부 판단
-        needs_rag, agent_debug = await agent.needs_rag(request.message)
+        # 라우터로 경로 결정
+        route_decision = await router.route(request.message)
 
         debug_info = {
-            "agent": agent_debug,
-            "used_rag": needs_rag
+            "router": route_decision,
+            "route": route_decision["route"]
         }
 
         rag_doc_count = None
         rag_max_score = None
+        used_rag = False
+        used_tool = None
+        changed_language = None  # 툴로 변경된 언어
 
-        if needs_rag:
+        # 경로별 처리
+        if route_decision["route"] == "TOOL_CALL":
+            # 툴 호출
+            tool_name = route_decision["tool_name"]
+            tool_params = route_decision.get("tool_params", {})
+            tool_type = route_decision["tool_type"]
+
+            logger.info(f"🔧 툴 호출: {tool_name} ({tool_type})")
+
+            # 툴 실행
+            tool_result = await tool_executor.execute_tool(tool_name, tool_params)
+            debug_info["tool_result"] = tool_result
+            used_tool = tool_name
+
+            # set_language 툴인 경우 변경된 언어 추출
+            if tool_name == "set_language" and tool_result.get("success"):
+                changed_language = tool_result.get("result", {}).get("language")
+                logger.info(f"🌐 언어 변경 감지: {changed_language}")
+
+            if not tool_result["success"]:
+                # 툴 실행 실패
+                response = f"죄송합니다. {tool_result.get('error', '알 수 없는 오류')}"
+                logger.error(f"❌ 툴 실행 실패: {tool_result.get('error')}")
+            elif tool_type == "Self-Contained":
+                # 자체 처리 툴 - 즉시 응답
+                response = tool_result["result"].get("message", tool_result["notification"])
+                logger.info(f"✅ Self-Contained 툴 완료: {response}")
+            else:
+                # LLM-Interpreted 툴 - Gemma3로 해석
+                logger.info(f"🤖 LLM 해석 시작 (툴 결과 해석)")
+                response = await interpret_tool_result_with_llm(
+                    user_message=request.message,
+                    tool_name=tool_name,
+                    tool_result=tool_result["result"],
+                    language=changed_language if changed_language else request.language
+                )
+                debug_info["llm_interpretation"] = response
+
+        elif route_decision["route"] == "RAG_QUERY":
             # RAG 파이프라인 실행
+            logger.info(f"📚 RAG 쿼리 실행")
+            used_rag = True
+
             response, rag_debug = await rag_pipeline.query(
-                query=request.message,
+                query=route_decision["query"],
                 store_id=request.store_id,
-                category=request.category
+                category=request.category,
+                language=request.language
             )
             debug_info["rag"] = rag_debug
 
@@ -121,10 +327,12 @@ async def chat(request: ChatRequest, http_request: Request):
                 rag_doc_count = len(rag_debug["retrieved_documents"])
                 if rag_doc_count > 0:
                     rag_max_score = rag_debug["retrieved_documents"][0].get("score")
-        else:
-            # 일반 대화
-            response, chat_debug = await agent.chat(request.message)
-            debug_info["chat"] = chat_debug
+
+        else:  # SIMPLE_QA
+            # 일반 대화 - Gemma3 직접 응답
+            logger.info(f"💬 일반 대화 처리")
+            response = await simple_chat_with_llm(route_decision["query"], language=request.language)
+            debug_info["simple_chat"] = response
 
         # 응답 시간 계산
         response_time_ms = int((time.time() - start_time) * 1000)
@@ -156,13 +364,26 @@ async def chat(request: ChatRequest, http_request: Request):
         logger.info(f"✅ 채팅 완료: 응답 길이 = {len(response)} 문자, 응답 시간 = {response_time_ms}ms")
         logger.info("✅ " + "="*76 + "\n")
 
-        return JSONResponse({
+        # 응답 구성
+        response_data = {
             "response": response,
-            "used_rag": needs_rag,
+            "route": route_decision["route"],
+            "used_rag": used_rag,
+            "used_tool": used_tool,
             "conversation_uuid": conversation_uuid,
             "response_time_ms": response_time_ms,
             "debug": debug_info
-        })
+        }
+
+        # 언어가 변경된 경우 변경된 언어를 반환, 아니면 요청 언어 반환
+        if changed_language:
+            response_data["language"] = changed_language
+            response_data["language_changed"] = True
+            logger.info(f"📤 응답에 변경된 언어 포함: {changed_language}")
+        else:
+            response_data["language"] = request.language
+
+        return JSONResponse(response_data)
 
     except Exception as e:
         logger.error(f"채팅 오류: {str(e)}")
@@ -243,6 +464,35 @@ async def get_stores():
 async def health():
     """헬스 체크"""
     return {"status": "healthy", "service": "rag-server"}
+
+
+@app.get("/api/language")
+async def get_language():
+    """
+    현재 언어 설정 조회 (프론트엔드용)
+    로컬 스토리지에서 관리하므로 기본값만 반환
+    """
+    return {"language": "ko"}
+
+
+@app.post("/api/language")
+async def set_language(language: str = "ko"):
+    """
+    언어 설정 변경 (프론트엔드용)
+    실제로는 프론트엔드에서 로컬 스토리지로 관리
+    """
+    supported_languages = ["ko", "en", "ja", "zh"]
+    if language not in supported_languages:
+        return JSONResponse(
+            {"error": f"지원하지 않는 언어입니다. 지원 언어: {', '.join(supported_languages)}"},
+            status_code=400
+        )
+
+    return {
+        "success": True,
+        "language": language,
+        "message": f"언어가 {language}(으)로 변경되었습니다"
+    }
 
 
 @app.get("/api/logging-queue/status")

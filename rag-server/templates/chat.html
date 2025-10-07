@@ -128,6 +128,35 @@
             background: #5568d3;
         }
 
+        .language-buttons {
+            display: flex;
+            gap: 10px;
+            margin-top: 15px;
+        }
+
+        .btn-language {
+            flex: 1;
+            padding: 10px;
+            background: white;
+            color: #667eea;
+            border: 2px solid #667eea;
+            border-radius: 8px;
+            font-size: 13px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+
+        .btn-language:hover {
+            background: #667eea;
+            color: white;
+        }
+
+        .btn-language.active {
+            background: #667eea;
+            color: white;
+        }
+
         .chat-container {
             height: 500px;
             overflow-y: auto;
@@ -319,16 +348,20 @@
             opacity: 1;
             transform: translateY(0);
         }
+
+        .toast.success {
+            background: #28a745;
+        }
     </style>
 </head>
 <body>
     <div class="container">
         <div class="header">
-            <a href="javascript:history.back()" class="back-button">
-                ← 뒤로가기
+            <a href="javascript:history.back()" class="back-button" id="backButton">
+                ← <span id="backButtonText">뒤로가기</span>
             </a>
-            <h1>🍽️ WAFL RAG LLM</h1>
-            <p>매장 정보 챗봇 테스트</p>
+            <h1 id="headerTitle">🍽️ WAFL RAG LLM</h1>
+            <p id="headerSubtitle">매장 정보 챗봇 테스트</p>
             <div class="session-status active" id="sessionStatus">
                 <span class="dot"></span>
                 <span id="sessionText">대화 활성</span>
@@ -338,13 +371,13 @@
         <div class="settings">
             <div class="settings-row">
                 <div class="settings-group">
-                    <label>매장 선택</label>
+                    <label id="labelStore">매장 선택</label>
                     <select id="storeId">
-                        <option value="">로딩 중...</option>
+                        <option value="" id="optionLoading">로딩 중...</option>
                     </select>
                 </div>
                 <div class="settings-group">
-                    <label>카테고리</label>
+                    <label id="labelCategory">카테고리</label>
                     <select id="category">
                         <option value="customer">Customer</option>
                         <option value="owner">Owner</option>
@@ -352,15 +385,21 @@
                 </div>
             </div>
             <div style="display: flex; gap: 10px;">
-                <button class="btn-index" style="flex: 1;" onclick="generateDocuments()">📝 문서 자동 생성</button>
-                <button class="btn-index" style="flex: 1;" onclick="indexDocuments()">📚 문서 인덱싱</button>
+                <button class="btn-index" style="flex: 1;" onclick="generateDocuments()" id="btnGenerate">📝 문서 자동 생성</button>
+                <button class="btn-index" style="flex: 1;" onclick="indexDocuments()" id="btnIndex">📚 문서 인덱싱</button>
+            </div>
+            <div class="language-buttons">
+                <button class="btn-language active" onclick="changeLanguage('ko')" data-lang="ko">🇰🇷 한국어</button>
+                <button class="btn-language" onclick="changeLanguage('en')" data-lang="en">🇺🇸 English</button>
+                <button class="btn-language" onclick="changeLanguage('zh')" data-lang="zh">🇨🇳 中文</button>
+                <button class="btn-language" onclick="changeLanguage('ja')" data-lang="ja">🇯🇵 日本語</button>
             </div>
             <div id="indexStatus"></div>
         </div>
 
         <div class="chat-container" id="chatContainer">
             <div class="message assistant">
-                <div class="message-content">
+                <div class="message-content" id="welcomeMessage">
                     안녕하세요! 매장 정보를 안내해드리는 AI 어시스턴트입니다. 무엇을 도와드릴까요?
                 </div>
             </div>
@@ -385,19 +424,193 @@
     <div class="toast" id="toast"></div>
 
     <script>
-        // 대화 세션 관리 변수
-        let conversationUuid = sessionStorage.getItem('conversationUuid');  // 현재 대화 세션 UUID (세션 저장소에서 복원)
-        let inactivityTimer = null;   // 비활성 타이머
-        let isSessionActive = sessionStorage.getItem('isSessionActive') !== 'false';   // 세션 활성 상태
-        const INACTIVITY_TIMEOUT = 60000; // 1분 (60초)
+        // 다국어 텍스트
+        const translations = {
+            ko: {
+                backButton: "뒤로가기",
+                headerTitle: "🍽️ WAFL RAG LLM",
+                headerSubtitle: "매장 정보 챗봇 테스트",
+                sessionActive: "대화 활성",
+                sessionInactive: "대화 종료",
+                labelStore: "매장 선택",
+                labelCategory: "카테고리",
+                btnGenerate: "📝 문서 자동 생성",
+                btnIndex: "📚 문서 인덱싱",
+                inputPlaceholder: "메시지를 입력하세요... (최대 30자)",
+                sendButton: "전송",
+                charCounter: "{count} / 30자",
+                welcomeMessage: "안녕하세요! 매장 정보를 안내해드리는 AI 어시스턴트입니다. 무엇을 도와드릴까요?",
+                conversationEnded: "대화가 종료되었습니다. 새로운 질문을 입력하면 새 대화가 시작됩니다.",
+                errorSelectStore: "❌ 매장을 선택하세요",
+                errorMaxLength: "⚠️ 질문은 30자 이내로 입력해주세요!",
+                documentGenerateSuccess: "✅ 문서 생성 완료: {count}개 파일",
+                indexSuccess: "✅ 인덱싱 완료: {count}개 청크",
+                languageChanged: "언어가 {lang}(으)로 변경되었습니다",
+                badgeTool: "🔧 툴",
+                badgeRag: "📚 RAG",
+                badgeSimple: "💬 일반"
+            },
+            en: {
+                backButton: "Back",
+                headerTitle: "🍽️ WAFL RAG LLM",
+                headerSubtitle: "Store Info Chatbot Test",
+                sessionActive: "Active",
+                sessionInactive: "Ended",
+                labelStore: "Select Store",
+                labelCategory: "Category",
+                btnGenerate: "📝 Generate Docs",
+                btnIndex: "📚 Index Docs",
+                inputPlaceholder: "Enter message... (max 30 chars)",
+                sendButton: "Send",
+                charCounter: "{count} / 30 chars",
+                welcomeMessage: "Hello! I'm an AI assistant to guide you through store information. How can I help you?",
+                conversationEnded: "Conversation ended. Enter a new question to start a new conversation.",
+                errorSelectStore: "❌ Please select a store",
+                errorMaxLength: "⚠️ Please enter within 30 characters!",
+                documentGenerateSuccess: "✅ Documents generated: {count} files",
+                indexSuccess: "✅ Indexing completed: {count} chunks",
+                languageChanged: "Language changed to {lang}",
+                badgeTool: "🔧 Tool",
+                badgeRag: "📚 RAG",
+                badgeSimple: "💬 Simple"
+            },
+            zh: {
+                backButton: "返回",
+                headerTitle: "🍽️ WAFL RAG LLM",
+                headerSubtitle: "商店信息聊天机器人测试",
+                sessionActive: "对话活跃",
+                sessionInactive: "对话结束",
+                labelStore: "选择商店",
+                labelCategory: "类别",
+                btnGenerate: "📝 自动生成文档",
+                btnIndex: "📚 文档索引",
+                inputPlaceholder: "输入消息... (最多30个字符)",
+                sendButton: "发送",
+                charCounter: "{count} / 30字符",
+                welcomeMessage: "您好！我是为您提供商店信息的AI助手。我能帮您什么？",
+                conversationEnded: "对话已结束。输入新问题开始新对话。",
+                errorSelectStore: "❌ 请选择商店",
+                errorMaxLength: "⚠️ 请在30个字符内输入！",
+                documentGenerateSuccess: "✅ 文档生成完成：{count}个文件",
+                indexSuccess: "✅ 索引完成：{count}个块",
+                languageChanged: "语言已更改为{lang}",
+                badgeTool: "🔧 工具",
+                badgeRag: "📚 RAG",
+                badgeSimple: "💬 简单"
+            },
+            ja: {
+                backButton: "戻る",
+                headerTitle: "🍽️ WAFL RAG LLM",
+                headerSubtitle: "店舗情報チャットボットテスト",
+                sessionActive: "会話アクティブ",
+                sessionInactive: "会話終了",
+                labelStore: "店舗選択",
+                labelCategory: "カテゴリー",
+                btnGenerate: "📝 文書自動生成",
+                btnIndex: "📚 文書インデックス",
+                inputPlaceholder: "メッセージを入力... (最大30文字)",
+                sendButton: "送信",
+                charCounter: "{count} / 30文字",
+                welcomeMessage: "こんにちは！店舗情報をご案内するAIアシスタントです。何かお手伝いできますか？",
+                conversationEnded: "会話が終了しました。新しい質問を入力すると、新しい会話が始まります。",
+                errorSelectStore: "❌ 店舗を選択してください",
+                errorMaxLength: "⚠️ 30文字以内で入力してください！",
+                documentGenerateSuccess: "✅ 文書生成完了：{count}ファイル",
+                indexSuccess: "✅ インデックス完了：{count}チャンク",
+                languageChanged: "言語が{lang}に変更されました",
+                badgeTool: "🔧 ツール",
+                badgeRag: "📚 RAG",
+                badgeSimple: "💬 通常"
+            }
+        };
 
-        // 페이지 로드시 세션 상태 복원
+        // 현재 언어 (로컬 스토리지에서 로드)
+        let currentLanguage = localStorage.getItem('language') || 'ko';
+
+        // 언어 변경 함수
+        function changeLanguage(lang) {
+            currentLanguage = lang;
+            localStorage.setItem('language', lang);
+
+            // UI 업데이트
+            updateUILanguage();
+
+            // 언어 버튼 활성화 상태 업데이트
+            document.querySelectorAll('.btn-language').forEach(btn => {
+                if (btn.getAttribute('data-lang') === lang) {
+                    btn.classList.add('active');
+                } else {
+                    btn.classList.remove('active');
+                }
+            });
+
+            // 성공 토스트 표시
+            const langNames = {
+                ko: "한국어",
+                en: "English",
+                zh: "中文",
+                ja: "日本語"
+            };
+            showToast(translations[lang].languageChanged.replace('{lang}', langNames[lang]), 'success');
+        }
+
+        // UI 텍스트 업데이트
+        function updateUILanguage() {
+            const t = translations[currentLanguage];
+
+            document.getElementById('backButtonText').textContent = t.backButton;
+            document.getElementById('headerTitle').textContent = t.headerTitle;
+            document.getElementById('headerSubtitle').textContent = t.headerSubtitle;
+            document.getElementById('labelStore').textContent = t.labelStore;
+            document.getElementById('labelCategory').textContent = t.labelCategory;
+            document.getElementById('btnGenerate').textContent = t.btnGenerate;
+            document.getElementById('btnIndex').textContent = t.btnIndex;
+            document.getElementById('messageInput').placeholder = t.inputPlaceholder;
+            document.getElementById('sendButton').textContent = t.sendButton;
+
+            // 세션 상태 텍스트
+            updateSessionStatusText();
+
+            // 문자 카운터
+            updateCharCounter();
+        }
+
+        // 세션 상태 텍스트 업데이트
+        function updateSessionStatusText() {
+            const t = translations[currentLanguage];
+            const textElement = document.getElementById('sessionText');
+            if (isSessionActive) {
+                textElement.textContent = t.sessionActive;
+            } else {
+                textElement.textContent = t.sessionInactive;
+            }
+        }
+
+        // 대화 세션 관리 변수
+        let conversationUuid = sessionStorage.getItem('conversationUuid');
+        let inactivityTimer = null;
+        let isSessionActive = sessionStorage.getItem('isSessionActive') !== 'false';
+        const INACTIVITY_TIMEOUT = 60000; // 1분
+
+        // 페이지 로드시 언어 설정 및 세션 상태 복원
         window.addEventListener('DOMContentLoaded', () => {
+            // 언어 설정 복원
+            updateUILanguage();
+
+            // 언어 버튼 활성화 상태 복원
+            document.querySelectorAll('.btn-language').forEach(btn => {
+                if (btn.getAttribute('data-lang') === currentLanguage) {
+                    btn.classList.add('active');
+                } else {
+                    btn.classList.remove('active');
+                }
+            });
+
+            // 세션 상태 복원
             if (conversationUuid) {
                 console.log('🔄 기존 대화 세션 복원:', conversationUuid);
                 updateSessionStatus(isSessionActive);
 
-                // 세션이 활성 상태면 타이머 시작
                 if (isSessionActive) {
                     resetInactivityTimer();
                 }
@@ -411,24 +624,23 @@
 
             const statusElement = document.getElementById('sessionStatus');
             const textElement = document.getElementById('sessionText');
+            const t = translations[currentLanguage];
 
             if (active) {
                 statusElement.className = 'session-status active';
-                textElement.textContent = '대화 활성';
+                textElement.textContent = t.sessionActive;
             } else {
                 statusElement.className = 'session-status inactive';
-                textElement.textContent = '대화 종료';
+                textElement.textContent = t.sessionInactive;
             }
         }
 
         // 비활성 타이머 리셋
         function resetInactivityTimer() {
-            // 기존 타이머 제거
             if (inactivityTimer) {
                 clearTimeout(inactivityTimer);
             }
 
-            // 세션이 활성 상태일 때만 타이머 설정
             if (isSessionActive && conversationUuid) {
                 inactivityTimer = setTimeout(async () => {
                     console.log('⏱️ 1분 동안 입력이 없어 대화를 종료합니다.');
@@ -457,18 +669,16 @@
                     console.log('✅ 대화 종료:', conversationUuid);
                     updateSessionStatus(false);
 
-                    // 세션 저장소에서 UUID 제거 (종료된 세션은 재사용 안함)
                     sessionStorage.removeItem('conversationUuid');
                     conversationUuid = null;
 
-                    // 비활성 타이머 제거
                     if (inactivityTimer) {
                         clearTimeout(inactivityTimer);
                         inactivityTimer = null;
                     }
 
-                    // 종료 메시지 표시
-                    addMessage('대화가 종료되었습니다. 새로운 질문을 입력하면 새 대화가 시작됩니다.', 'assistant');
+                    const t = translations[currentLanguage];
+                    addMessage(t.conversationEnded, 'assistant');
                 } else {
                     console.error('❌ 대화 종료 실패:', data.message);
                 }
@@ -480,7 +690,6 @@
         // 페이지 이탈시 대화 종료
         window.addEventListener('beforeunload', (event) => {
             if (conversationUuid && isSessionActive) {
-                // 동기 방식으로 전송 (페이지 이탈 전에 완료)
                 navigator.sendBeacon(
                     `api/conversations/${conversationUuid}/end`,
                     new Blob([JSON.stringify({})], { type: 'application/json' })
@@ -493,8 +702,9 @@
             const input = document.getElementById('messageInput');
             const counter = document.getElementById('charCounter');
             const currentLength = input.value.length;
+            const t = translations[currentLanguage];
 
-            counter.textContent = `${currentLength} / 30자`;
+            counter.textContent = t.charCounter.replace('{count}', currentLength);
 
             if (currentLength >= 30) {
                 counter.classList.add('warning');
@@ -504,13 +714,19 @@
         }
 
         // 토스트 알림 표시
-        function showToast(message) {
+        function showToast(message, type = 'error') {
             const toast = document.getElementById('toast');
             toast.textContent = message;
-            toast.classList.add('show');
+            toast.className = 'toast show';
+            if (type === 'success') {
+                toast.classList.add('success');
+            }
 
             setTimeout(() => {
                 toast.classList.remove('show');
+                setTimeout(() => {
+                    toast.classList.remove('success');
+                }, 300);
             }, 2000);
         }
 
@@ -535,6 +751,7 @@
                         storeSelect.appendChild(option);
                     });
                 } else {
+                    const t = translations[currentLanguage];
                     storeSelect.innerHTML = '<option value="">매장 없음</option>';
                 }
             } catch (error) {
@@ -550,9 +767,10 @@
         async function generateDocuments() {
             const storeId = document.getElementById('storeId').value;
             const statusDiv = document.getElementById('indexStatus');
+            const t = translations[currentLanguage];
 
             if (!storeId) {
-                statusDiv.innerHTML = '<div class="status error">❌ 매장을 선택하세요</div>';
+                statusDiv.innerHTML = `<div class="status error">${t.errorSelectStore}</div>`;
                 return;
             }
 
@@ -566,7 +784,7 @@
                     },
                     body: JSON.stringify({
                         store_id: parseInt(storeId),
-                        category: 'customer'  // 기본값
+                        category: 'customer'
                     })
                 });
 
@@ -574,7 +792,7 @@
 
                 if (data.status === 'success') {
                     const docCount = data.data.documents.length;
-                    statusDiv.innerHTML = `<div class="status success">✅ 문서 생성 완료: ${docCount}개 파일</div>`;
+                    statusDiv.innerHTML = `<div class="status success">${t.documentGenerateSuccess.replace('{count}', docCount)}</div>`;
                 } else {
                     statusDiv.innerHTML = `<div class="status error">❌ ${data.message}</div>`;
                 }
@@ -592,6 +810,7 @@
             const storeId = document.getElementById('storeId').value;
             const category = document.getElementById('category').value;
             const statusDiv = document.getElementById('indexStatus');
+            const t = translations[currentLanguage];
 
             statusDiv.innerHTML = '<div class="loading"></div>';
 
@@ -610,7 +829,7 @@
                 const data = await response.json();
 
                 if (data.status === 'success') {
-                    statusDiv.innerHTML = `<div class="status success">✅ 인덱싱 완료: ${data.indexed_chunks}개 청크</div>`;
+                    statusDiv.innerHTML = `<div class="status success">${t.indexSuccess.replace('{count}', data.indexed_chunks)}</div>`;
                 } else {
                     statusDiv.innerHTML = `<div class="status error">❌ ${data.message}</div>`;
                 }
@@ -627,34 +846,30 @@
         async function sendMessage() {
             const input = document.getElementById('messageInput');
             const message = input.value.trim();
+            const t = translations[currentLanguage];
 
             if (!message) return;
 
-            // 30자 제한 체크
             if (message.length > 30) {
-                showToast('⚠️ 질문은 30자 이내로 입력해주세요!');
+                showToast(t.errorMaxLength);
                 return;
             }
 
             const storeId = document.getElementById('storeId').value;
             const category = document.getElementById('category').value;
 
-            // 종료된 세션이면 새로 시작
             if (!isSessionActive) {
                 conversationUuid = null;
                 updateSessionStatus(true);
                 console.log('🆕 새로운 대화 세션 시작');
             }
 
-            // 사용자 메시지 추가
             addMessage(message, 'user');
             input.value = '';
             updateCharCounter();
 
-            // 비활성 타이머 리셋
             resetInactivityTimer();
 
-            // 전송 버튼 비활성화
             const sendButton = document.getElementById('sendButton');
             sendButton.disabled = true;
             sendButton.innerHTML = '<div class="loading"></div>';
@@ -663,10 +878,10 @@
                 const requestBody = {
                     message: message,
                     store_id: parseInt(storeId),
-                    category: category
+                    category: category,
+                    language: currentLanguage  // 언어 설정 전송
                 };
 
-                // 기존 대화 UUID가 있으면 포함
                 if (conversationUuid) {
                     requestBody.conversation_uuid = conversationUuid;
                 }
@@ -684,52 +899,36 @@
                 if (data.error) {
                     addMessage(`오류: ${data.error}`, 'assistant');
                 } else {
-                    // 첫 메시지면 UUID 저장 (세션 저장소에도 저장)
                     if (!conversationUuid && data.conversation_uuid) {
                         conversationUuid = data.conversation_uuid;
                         sessionStorage.setItem('conversationUuid', conversationUuid);
-                        console.log('💾 대화 UUID 저장 (sessionStorage):', conversationUuid);
+                        console.log('💾 대화 UUID 저장:', conversationUuid);
                         updateSessionStatus(true);
                     }
 
-                    addMessage(data.response, 'assistant', data.used_rag);
+                    // 툴 호출 결과 확인 (언어 변경 툴인 경우)
+                    if (data.route === 'TOOL_CALL' && data.used_tool === 'set_language') {
+                        if (data.language_changed && data.language) {
+                            // 언어가 실제로 변경된 경우, 프론트엔드 언어도 변경
+                            console.log('🌐 언어 변경 감지:', data.language);
+                            changeLanguage(data.language);
+                        } else if (data.language) {
+                            // language_changed 플래그가 없어도 language가 있으면 변경 시도
+                            console.log('🌐 언어 변경 시도:', data.language);
+                            changeLanguage(data.language);
+                        }
+                    }
+
+                    addMessage(data.response, 'assistant', data.used_rag, data.route, data.used_tool);
 
                     // 디버그 정보 콘솔 출력
                     if (data.debug) {
                         console.log('='.repeat(80));
                         console.log('🔍 디버그 정보');
                         console.log('='.repeat(80));
-                        console.log('📊 전체 디버그 데이터:', data.debug);
-
-                        if (data.debug.agent) {
-                            console.log('\n🤖 [에이전트] RAG 필요 여부 판단');
-                            console.log('  모델:', data.debug.agent.agent_model || 'N/A');
-                            console.log('  프롬프트:\n', data.debug.agent.agent_prompt || 'N/A');
-                            console.log('  응답:', data.debug.agent.agent_response || 'N/A');
-                        }
-
-                        if (data.debug.rag) {
-                            console.log('\n📚 [RAG] 문서 검색 및 응답 생성');
-                            console.log('  LLM 모델:', data.debug.rag.llm_model || 'N/A');
-                            if (data.debug.rag.retrieved_documents) {
-                                console.log('  검색된 문서:', data.debug.rag.retrieved_documents.length, '개');
-                                data.debug.rag.retrieved_documents.forEach((doc, idx) => {
-                                    console.log(`    [${idx + 1}] 유사도: ${doc.score.toFixed(4)}`);
-                                    console.log(`        미리보기: ${doc.text_preview.substring(0, 100)}...`);
-                                });
-                            }
-                            console.log('  컨텍스트 길이:', data.debug.rag.context_length || 'N/A', '문자');
-                            console.log('  최종 프롬프트:\n', data.debug.rag.final_prompt || 'N/A');
-                            console.log('  LLM 응답:\n', data.debug.rag.llm_response || 'N/A');
-                        }
-
-                        if (data.debug.chat) {
-                            console.log('\n💬 [일반 대화]');
-                            console.log('  모델:', data.debug.chat.chat_model || 'N/A');
-                            console.log('  프롬프트:\n', data.debug.chat.chat_prompt || 'N/A');
-                            console.log('  응답:', data.debug.chat.chat_response || 'N/A');
-                        }
-
+                        console.log('📊 라우트:', data.route);
+                        console.log('🔧 사용된 툴:', data.used_tool || 'N/A');
+                        console.log('📚 RAG 사용:', data.used_rag);
                         console.log('='.repeat(80));
                     }
                 }
@@ -738,18 +937,28 @@
                 addMessage(`오류: ${error.message}`, 'assistant');
             } finally {
                 sendButton.disabled = false;
-                sendButton.innerHTML = '전송';
+                sendButton.innerHTML = t.sendButton;
             }
         }
 
-        function addMessage(text, type, usedRag = null) {
+        function addMessage(text, type, usedRag = null, route = null, usedTool = null) {
             const chatContainer = document.getElementById('chatContainer');
             const messageDiv = document.createElement('div');
             messageDiv.className = `message ${type}`;
 
+            const t = translations[currentLanguage];
             let badgeHtml = '';
-            if (usedRag !== null) {
-                badgeHtml = `<div class="message-badge">${usedRag ? '📚 RAG' : '💬 일반'}</div>`;
+
+            // 배지 표시 우선순위: TOOL_CALL > RAG_QUERY > SIMPLE_QA
+            if (route === 'TOOL_CALL' && usedTool) {
+                // 툴 호출인 경우
+                badgeHtml = `<div class="message-badge">${t.badgeTool}</div>`;
+            } else if (usedRag === true) {
+                // RAG 사용한 경우
+                badgeHtml = `<div class="message-badge">${t.badgeRag}</div>`;
+            } else if (type === 'assistant' && (route === 'SIMPLE_QA' || usedRag === false)) {
+                // 일반 대화인 경우
+                badgeHtml = `<div class="message-badge">${t.badgeSimple}</div>`;
             }
 
             messageDiv.innerHTML = `

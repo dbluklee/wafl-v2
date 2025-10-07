@@ -96,7 +96,7 @@ class RAGPipeline:
                 "message": str(e)
             }
 
-    async def query(self, query: str, store_id: int, category: str = "customer") -> tuple[str, dict]:
+    async def query(self, query: str, store_id: int, category: str = "customer", language: str = "ko") -> tuple[str, dict]:
         """
         RAG 쿼리 실행
 
@@ -104,6 +104,7 @@ class RAGPipeline:
             query: 사용자 질문
             store_id: 매장 ID
             category: 문서 카테고리
+            language: 응답 언어 (ko, en, ja, zh)
 
         Returns:
             tuple[str, dict]: (LLM 응답, 디버그 정보)
@@ -125,9 +126,17 @@ class RAGPipeline:
                 top_k=5
             )
 
+            # 언어별 에러 메시지
+            no_info_messages = {
+                "ko": "제가 잘 모르겠어요. 죄송하지만 직원에게 문의해주세요.",
+                "en": "I'm not sure. Please ask a staff member for assistance.",
+                "ja": "よくわかりません。申し訳ありませんが、スタッフにお問い合わせください。",
+                "zh": "我不太清楚。抱歉，请向工作人员咨询。"
+            }
+
             if not documents:
                 logger.warning("⚠️ 검색된 문서가 없습니다")
-                return "제가 잘 모르겠어요. 죄송하지만 직원에게 문의해주세요.", {"error": "No documents found"}
+                return no_info_messages.get(language, no_info_messages["ko"]), {"error": "No documents found"}
 
             logger.info(f"📚 검색된 문서: {len(documents)}개")
             for i, doc in enumerate(documents, 1):
@@ -137,29 +146,39 @@ class RAGPipeline:
             # 유사도가 너무 낮으면 관련 정보 없음으로 처리
             if documents[0]['score'] < 0.3:
                 logger.warning(f"⚠️ 최고 유사도가 너무 낮습니다: {documents[0]['score']:.4f}")
-                return "제가 잘 모르겠어요. 죄송하지만 직원에게 문의해주세요.", {"error": "Low relevance score", "max_score": documents[0]['score']}
+                return no_info_messages.get(language, no_info_messages["ko"]), {"error": "Low relevance score", "max_score": documents[0]['score']}
 
             # 컨텍스트 생성
             context = "\n\n".join([doc["text"] for doc in documents])
 
+            # 언어별 지시
+            language_instructions = {
+                "ko": "한국어로 답변하세요.",
+                "en": "Answer in English.",
+                "ja": "日本語で答えてください。",
+                "zh": "用中文回答。"
+            }
+
             # 프롬프트 템플릿
-            prompt = f"""당신은 매장의 친절한 직원입니다.
-아래 매장 문서를 바탕으로 손님의 질문에 답변하세요.
+            prompt = f"""You are a friendly store assistant.
+Answer the customer's question based on the store documents below.
 
-답변 규칙:
-1. 50자 이내로 간결하게 답변하세요
-2. 손님이 원하는 핵심만 전달하세요
-3. 친절하지만 요점만 말하세요
-4. 불필요한 설명은 생략하세요
-5. **중요**: 문서에 정보가 없거나 확실하지 않으면 절대 거짓말하지 마세요
-6. 모르는 내용은 "제가 잘 모르겠어요. 죄송하지만 직원에게 문의해주세요"라고 답변하세요
+Response rules:
+1. Keep your answer concise, within 50 characters
+2. Deliver only the key points the customer wants
+3. Be kind but get to the point
+4. Skip unnecessary explanations
+5. **Important**: Never make up information if the documents don't contain it or you're unsure
+6. If you don't know, say "I'm not sure. Please ask a staff member for assistance"
 
-매장 문서:
+**IMPORTANT: {language_instructions.get(language, language_instructions["ko"])}**
+
+Store documents:
 {context}
 
-손님 질문: {query}
+Customer question: {query}
 
-직원 답변:"""
+Assistant answer:"""
 
             logger.info("="*80)
             logger.info("🤖 [LLM] 응답 생성")
@@ -176,9 +195,16 @@ class RAGPipeline:
             answer = response['response'].strip()
 
             # 50자 제한 체크 및 추가 설명 제안
+            more_messages = {
+                "ko": "\n\n더 자세히 설명해드릴까요?",
+                "en": "\n\nWould you like more details?",
+                "ja": "\n\nもっと詳しく説明しましょうか？",
+                "zh": "\n\n需要更详细的说明吗？"
+            }
+
             if len(answer) > 50:
                 answer = answer[:50] + "..."
-                answer += "\n\n더 자세히 설명해드릴까요?"
+                answer += more_messages.get(language, more_messages["ko"])
 
             logger.info(f"💬 LLM 응답:\n{answer}")
             logger.info("="*80)
