@@ -30,3 +30,7 @@ tiktoken==0.5.2
 
 # Encryption
 cryptography==41.0.7
+
+# Redis Queue (비동기 로깅)
+redis==5.0.1
+rq==1.15.1

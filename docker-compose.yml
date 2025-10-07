@@ -205,6 +205,9 @@ services:
       - DATABASE_URL=postgresql://wafl_user:wafl_password@wafl-postgresql:5432/wafl_db
       - CONVERSATION_DB_URL=postgresql://conv_secure_user:${CONVERSATION_DB_PASSWORD:-conv_secure_pass_2024!}@wafl-conversation-db:5432/conversation_db
       - CONVERSATION_ENCRYPTION_KEY=${CONVERSATION_ENCRYPTION_KEY:-your-secure-32-byte-encryption-key-here}
+      - REDIS_HOST=wafl-redis
+      - REDIS_PORT=6379
+      - REDIS_DB=1
       - MILVUS_HOST=wafl-milvus
       - MILVUS_PORT=19530
       - OLLAMA_MAIN_URL=http://112.148.37.41:1884
@@ -214,11 +217,35 @@ services:
     depends_on:
       - wafl-postgresql
       - wafl-conversation-db
+      - wafl-redis
       - wafl-milvus
     networks:
       - wafl-network
     restart: unless-stopped
     command: ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8002", "--reload"]
+
+  # RAG 대화 저장 워커 (비동기 로깅)
+  wafl-rag-worker:
+    build:
+      context: ./rag-server
+      dockerfile: Dockerfile
+    container_name: wafl-rag-worker
+    volumes:
+      - ./rag-server:/app
+    environment:
+      - DATABASE_URL=postgresql://wafl_user:wafl_password@wafl-postgresql:5432/wafl_db
+      - CONVERSATION_DB_URL=postgresql://conv_secure_user:${CONVERSATION_DB_PASSWORD:-conv_secure_pass_2024!}@wafl-conversation-db:5432/conversation_db
+      - CONVERSATION_ENCRYPTION_KEY=${CONVERSATION_ENCRYPTION_KEY:-your-secure-32-byte-encryption-key-here}
+      - REDIS_HOST=wafl-redis
+      - REDIS_PORT=6379
+      - REDIS_DB=1
+    depends_on:
+      - wafl-redis
+      - wafl-conversation-db
+    networks:
+      - wafl-network
+    restart: unless-stopped
+    command: ["python", "worker.py"]
 
 volumes:
   postgresql_data:

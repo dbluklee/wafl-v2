@@ -12,6 +12,7 @@ from agent import Agent
 from rag_pipeline import RAGPipeline
 from document_generator import DocumentGenerator
 from conversation_service import get_conversation_service
+from conversation_logger import get_conversation_logger
 
 # 로깅 설정
 logging.basicConfig(level=logging.INFO)
@@ -34,6 +35,18 @@ try:
 except Exception as e:
     logger.error(f"⚠️ 대화 저장 서비스 초기화 실패: {str(e)}")
     conversation_service = None
+
+# 비동기 대화 로거 초기화
+try:
+    conversation_logger = get_conversation_logger()
+    if conversation_logger.is_available():
+        queue_info = conversation_logger.get_queue_info()
+        logger.info(f"✅ 비동기 대화 로거 초기화 완료 (큐: {queue_info.get('queued_jobs', 0)}개 대기)")
+    else:
+        logger.warning("⚠️ 비동기 대화 로거 사용 불가 - 동기 저장으로 대체")
+except Exception as e:
+    logger.error(f"⚠️ 비동기 대화 로거 초기화 실패: {str(e)}")
+    conversation_logger = None
 
 
 class ChatRequest(BaseModel):
@@ -116,10 +129,11 @@ async def chat(request: ChatRequest, http_request: Request):
         # 응답 시간 계산
         response_time_ms = int((time.time() - start_time) * 1000)
 
-        # 대화 저장 (암호화)
-        if conversation_service and conversation_uuid:
+        # 대화 저장 (비동기 전용 - 실패 시 저장 안함)
+        if conversation_logger and conversation_logger.is_available() and conversation_uuid:
             try:
-                message_id = conversation_service.save_message(
+                # 메시지를 큐에 추가만 하고 즉시 반환 (~1ms)
+                job_id = conversation_logger.enqueue_message_save(
                     conversation_uuid=conversation_uuid,
                     user_message=request.message,
                     bot_response=response,
@@ -128,9 +142,15 @@ async def chat(request: ChatRequest, http_request: Request):
                     rag_doc_count=rag_doc_count,
                     rag_max_score=rag_max_score
                 )
-                logger.info(f"🔐 대화 암호화 저장 완료: message_id={message_id}")
+                if job_id:
+                    logger.info(f"📤 대화 저장 작업 큐 추가: job_id={job_id}")
+                else:
+                    logger.warning("⚠️ 대화 저장 큐 추가 실패 - 저장 스킵")
             except Exception as e:
-                logger.error(f"⚠️ 대화 저장 실패: {str(e)}")
+                logger.error(f"⚠️ 대화 저장 실패 - 저장 스킵: {str(e)}")
+        else:
+            if conversation_uuid:
+                logger.warning("⚠️ 비동기 로거 사용 불가 - 대화 저장 스킵")
 
         logger.info("✅ " + "="*76)
         logger.info(f"✅ 채팅 완료: 응답 길이 = {len(response)} 문자, 응답 시간 = {response_time_ms}ms")
@@ -223,6 +243,37 @@ async def get_stores():
 async def health():
     """헬스 체크"""
     return {"status": "healthy", "service": "rag-server"}
+
+
+@app.get("/api/logging-queue/status")
+async def get_logging_queue_status():
+    """
+    비동기 로깅 큐 상태 조회
+
+    Returns:
+        큐 상태 정보 (대기중, 처리중, 완료, 실패 작업 수)
+    """
+    try:
+        if not conversation_logger or not conversation_logger.is_available():
+            return JSONResponse({
+                "available": False,
+                "message": "비동기 로깅 사용 불가"
+            })
+
+        queue_info = conversation_logger.get_queue_info()
+
+        return JSONResponse({
+            "available": True,
+            "queue_info": queue_info,
+            "message": "비동기 로깅 정상 작동 중"
+        })
+
+    except Exception as e:
+        logger.error(f"큐 상태 조회 오류: {str(e)}")
+        return JSONResponse(
+            {"error": str(e)},
+            status_code=500
+        )
 
 
 # =====================================================================
