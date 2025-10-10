@@ -1,5 +1,9 @@
 # .gitignore
+# Environment variables
 .env
+.env.*
+!.env.example
+!.env.*.example
 
 # Python
 __pycache__/
@@ -34,6 +38,37 @@ README.backup.md
 # Data files
 media/documents/
 media/images/
+data/  # Docker 볼륨 데이터 (DB, Redis, Milvus 등)
+
+# Database files
+*.db
+*.sqlite
+*.sqlite3
+*.dump
+*.sql.gz
+*.backup
+*.bak
+backups/
+
+# Secret & Sensitive files
+secrets/
+credentials/
+*.pem
+*.key
+*.p12
+*.pfx
+*.cert
+*.crt
+*_rsa
+*_rsa.pub
+*.ppk
+
+# Large files
+*.tar
+*.tar.gz
+*.zip
+*.rar
+*.7z
 
 # Temporary files
 tmp_*/
